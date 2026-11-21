@@ -1,6 +1,6 @@
 {
   "name": "dosim-caixa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Fluxo de caixa DoSim — Google Apps Script + PWA (GitHub Pages)",
   "license": "UNLICENSED",

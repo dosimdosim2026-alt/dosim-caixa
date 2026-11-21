@@ -1,6 +1,6 @@
 /* Service worker da PWA: guarda só o "casco" (index, ícones, manifest). O app do Apps Script é sempre buscado online.
  * Ao publicar mudanças na PWA, aumente VERSION (e a "version" do package.json: um teste exige que sejam iguais). */
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const CACHE = 'dosim-shell-' + VERSION;
 const ASSETS = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'offline.html',

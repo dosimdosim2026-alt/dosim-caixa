@@ -20,7 +20,7 @@
     html, body { height: 100%; margin: 0; background: var(--brand); overflow: hidden; overscroll-behavior: none; }
     /* O app ocupa a tela toda; as áreas seguras (notch / barra do iPhone) recebem as cores da marca */
     #app { position: fixed; top: env(safe-area-inset-top); right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom);
-           left: env(safe-area-inset-left); width: auto; height: auto; border: 0; background: #fff; }
+           left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border: 0; background: #fff; }
     .sa { position: fixed; left: 0; right: 0; z-index: 1; pointer-events: none; }
     #sa-top { top: 0; height: env(safe-area-inset-top); background: var(--sat); }
     #sa-bottom { bottom: 0; height: env(safe-area-inset-bottom); background: var(--sab); }

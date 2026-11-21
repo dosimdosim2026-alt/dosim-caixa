@@ -121,3 +121,12 @@ describe('REG-012 — com PIN ativo o app precisa pedir o PIN antes de carregar 
     assert.ok(start.indexOf('Auth.ensure()') > -1 && start.indexOf('Auth.ensure()') < start.indexOf("'core.bootstrap'"));
   });
 });
+
+describe('REG-013 — o iframe da PWA ficava com o tamanho padrão (300x150) em vez de ocupar a tela', () => {
+  test('a regra do #app define largura e altura explícitas (iframe é elemento "replaced": "auto" não estica)', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', '..', 'pwa', 'index.html'), 'utf8');
+    const regra = html.match(/#app\s*\{([^}]*)\}/)[1];
+    assert.ok(!/width:\s*auto|height:\s*auto/.test(regra), 'largura/altura "auto" deixam o iframe em 300x150');
+    assert.match(regra, /width:\s*(calc\(100%|100%)/); assert.match(regra, /height:\s*(calc\(100%|100%)/);
+  });
+});

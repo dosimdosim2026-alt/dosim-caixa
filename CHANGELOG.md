@@ -3,6 +3,11 @@
 Regra: cada correção ou funcionalidade entra aqui **e** ganha teste (veja `TESTING.md`).
 Correções citam o ID do teste de regressão (`REG-nnn`) em `tests/regression/regression.test.js`.
 
+## [1.0.1] - 2026-11-21
+
+### Correções
+- REG-013 — o iframe da PWA ficava com o tamanho padrão (300x150) em vez de ocupar a tela toda; a tela de PIN aparecia cortada no canto.
+
 ## [1.0.0] - 2026-11-19
 
 ### Novidades
