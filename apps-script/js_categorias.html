@@ -1,0 +1,48 @@
+<script>
+const Cat = {
+  async reload() { Store.categorias = await API.call('categorias.list'); },
+  form(item) {
+    const s = Object.assign({ nome: '', tipo: 'saida', cor: '#6366F1', ativo: true }, item || {});
+    const body = `
+      <div class="seg" data-f="tipo"><button data-v="entrada">Entrada</button><button data-v="saida">Saída</button></div>
+      <label>Nome<input id="c-nome" maxlength="60" placeholder="Ex.: Manutenção"></label>
+      <label>Cor<input id="c-cor" type="color"></label>
+      <div class="seg" data-f="ativo"><button data-v="true">Ativa</button><button data-v="false">Inativa</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar categoria</button></div>`;
+    UI.modal(s.id ? 'Editar categoria' : 'Nova categoria', body, (box, close) => {
+      $('#c-nome', box).value = s.nome; $('#c-cor', box).value = s.cor; bindSeg(box, s);
+      const done = msg => async () => { close(); UI.toast(msg); await Cat.reload(); App.refresh(); };
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          await API.call('categorias.save', { id: s.id, tipo: s.tipo, ativo: s.ativo, nome: $('#c-nome', box).value, cor: $('#c-cor', box).value });
+          await done('Categoria salva')();
+        });
+        if (del && await UI.confirm('Excluir esta categoria?')) UI.busy(del, async () => {
+          await API.call('categorias.remove', { id: s.id }); await done('Categoria excluída')();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'categorias', group: 'cadastros', label: 'Categorias', icon: 'tag', order: 30,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Categorias</h1><small>Tipos de entradas e saídas</small></div><button class="btn primary" data-add>${ico('plus')} Nova</button></div>`));
+    await Cat.reload();
+    const group = (tipo, titulo) => {
+      const rows = Store.categorias.filter(c => c.tipo === tipo);
+      return `<div class="sec-t">${titulo}</div><div class="list">${rows.length ? rows.map(c => `
+        <button class="item" data-id="${c.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(tipo === 'entrada' ? 'up' : 'down')}</span>
+          <span class="grow"><b>${esc(c.nome)}</b></span>${c.ativo ? '' : '<i class="chip">Inativa</i>'}</button>`).join('')
+        : '<div class="empty">Nenhuma categoria.</div>'}</div>`;
+    };
+    const box = h(`<div>${group('entrada', 'Entradas')}${group('saida', 'Saídas')}</div>`);
+    v.onclick = e => {
+      if (e.target.closest('[data-add]')) Cat.form();
+      const b = e.target.closest('.item'); if (b) Cat.form(Store.categorias.find(c => c.id === b.dataset.id));
+    };
+    v.append(box);
+  }
+});
+</script>

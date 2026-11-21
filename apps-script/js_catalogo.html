@@ -1,0 +1,65 @@
+<script>
+/** Catálogo: produtos/serviços (entradas) e despesas recorrentes (saídas). */
+const Catalogo = {
+  filtro: 'entrada', q: '',
+  async reload() { Store.catalogo = await API.call('catalogo.list'); },
+  form(item) {
+    const s = Object.assign({ tipo: Catalogo.filtro, nome: '', categoria_id: '', preco: '', ativo: true }, item || {});
+    const body = `
+      <div class="seg" data-f="tipo"><button data-v="entrada">Produto ou serviço</button><button data-v="saida">Despesa</button></div>
+      <label>Nome<input id="k-nome" maxlength="80" autocomplete="off"></label>
+      <label>Categoria padrão<select id="k-cat"></select></label>
+      <label>Valor padrão (opcional)<input id="k-preco" inputmode="numeric" data-money placeholder="R$ 0,00"></label>
+      <div class="seg" data-f="ativo"><button data-v="true">Ativo</button><button data-v="false">Inativo</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar item</button></div>`;
+    UI.modal(s.id ? 'Editar item' : 'Novo item', body, (box, close) => {
+      const el = id => $('#' + id, box);
+      el('k-nome').value = s.nome; el('k-preco').value = moneyFmt(s.preco);
+      const fill = () => {
+        const opts = Store.categorias.filter(c => c.tipo === s.tipo && (c.ativo || c.id === s.categoria_id));
+        if (!opts.some(c => c.id === s.categoria_id)) s.categoria_id = '';
+        el('k-cat').innerHTML = '<option value="">Sem categoria padrão</option>' + opts.map(c => `<option value="${c.id}" ${c.id === s.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+        el('k-nome').placeholder = s.tipo === 'entrada' ? 'Ex.: Corte e escova' : 'Ex.: Gasolina';
+      };
+      bindSeg(box, s, f => { if (f === 'tipo') fill(); }); fill();
+      const done = msg => async () => { close(); UI.toast(msg); await Catalogo.reload(); App.refresh(); };
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          await API.call('catalogo.save', { id: s.id, tipo: s.tipo, ativo: s.ativo, nome: el('k-nome').value,
+            categoria_id: el('k-cat').value, preco: parseMoney(el('k-preco').value) });
+          await done('Item salvo')();
+        });
+        if (del && await UI.confirm('Excluir este item? Os lançamentos já feitos continuam com a descrição.')) UI.busy(del, async () => {
+          await API.call('catalogo.remove', { id: s.id }); await done('Item excluído')();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'catalogo', group: 'cadastros', label: 'Catálogo', icon: 'box', order: 25,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Catálogo</h1><small>Produtos, serviços e despesas para lançar mais rápido</small></div><button class="btn primary" data-add>${ico('plus')} Novo item</button></div>`));
+    v.append(h(`<div class="seg" data-f="filtro"><button data-v="entrada">Produtos e serviços</button><button data-v="saida">Despesas</button></div>`));
+    v.append(h(`<label><input id="k-busca" type="search" placeholder="Buscar no catálogo" autocomplete="off" aria-label="Buscar no catálogo"></label>`));
+    const list = h('<div class="list"></div>'); v.append(list);
+    await Catalogo.reload();
+    const paint = () => {
+      const rows = Store.catalogo.filter(i => i.tipo === Catalogo.filtro && norm(i.nome).includes(norm(Catalogo.q)));
+      list.innerHTML = rows.length ? rows.map(i => { const c = catOf(i.categoria_id);
+        return `<button class="item" data-id="${i.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico('box')}</span>
+          <span class="grow"><b>${esc(i.nome)}</b><small>${i.categoria_id ? esc(c.nome) : 'Sem categoria padrão'}</small></span>
+          ${i.ativo ? '' : '<i class="chip">Inativo</i>'}${i.preco !== '' ? `<b>${brl(i.preco)}</b>` : ''}</button>`; }).join('')
+        : `<div class="empty">${Catalogo.q ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado.<br>Cadastre aqui ou salve ao lançar algo digitado manualmente.'}</div>`;
+    };
+    bindSeg(v, Catalogo, paint); paint();
+    $('#k-busca', v).value = Catalogo.q;
+    v.addEventListener('input', e => { if (e.target.id === 'k-busca') { Catalogo.q = e.target.value; paint(); } });
+    v.addEventListener('click', e => {
+      if (e.target.closest('[data-add]')) Catalogo.form();
+      const b = e.target.closest('.item'); if (b) Catalogo.form(Store.catalogo.find(i => i.id === b.dataset.id));
+    });
+  }
+});
+</script>

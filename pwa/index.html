@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>DoSim · Caixa</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#9E4563">
+  <meta name="description" content="Fluxo de caixa da DoSim">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DoSim">
+  <style>
+    :root { --brand: #9E4563; --sat: var(--brand); --sab: #ffffff; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: var(--brand); overflow: hidden; overscroll-behavior: none; }
+    /* O app ocupa a tela toda; as áreas seguras (notch / barra do iPhone) recebem as cores da marca */
+    #app { position: fixed; top: env(safe-area-inset-top); right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom);
+           left: env(safe-area-inset-left); width: auto; height: auto; border: 0; background: #fff; }
+    .sa { position: fixed; left: 0; right: 0; z-index: 1; pointer-events: none; }
+    #sa-top { top: 0; height: env(safe-area-inset-top); background: var(--sat); }
+    #sa-bottom { bottom: 0; height: env(safe-area-inset-bottom); background: var(--sab); }
+    #splash { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+              gap: 22px; padding: 24px; background: var(--brand); color: #fff; text-align: center; transition: opacity .35s;
+              font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #splash.hide { opacity: 0; pointer-events: none; }
+    #splash img { width: 132px; height: 132px; }
+    .spin { width: 28px; height: 28px; border: 3px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: r .9s linear infinite; }
+    @keyframes r { to { transform: rotate(360deg); } }
+    #help { display: none; max-width: 320px; }
+    #help a, #help button { display: inline-block; margin: 8px 6px 0; padding: 10px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.55);
+                            background: transparent; color: #fff; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } #splash { transition: none; } }
+  </style>
+</head>
+<body>
+  <iframe id="app" title="DoSim · Fluxo de Caixa" referrerpolicy="no-referrer" allow="clipboard-write"></iframe>
+  <div class="sa" id="sa-top"></div><div class="sa" id="sa-bottom"></div>
+
+  <div id="splash" role="status" aria-live="polite">
+    <img src="icons/icon-512.png" alt="DoSim" width="132" height="132">
+    <div class="spin" id="spin"></div>
+    <div id="help">
+      <p id="help-msg"></p>
+      <a id="open-direct" href="#" target="_top" rel="noopener">Abrir direto no navegador</a>
+      <button id="retry" type="button">Tentar novamente</button>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var cfg = window.APP_CONFIG || {};
+    var frame = document.getElementById('app'), splash = document.getElementById('splash');
+    var help = document.getElementById('help'), helpMsg = document.getElementById('help-msg'), spin = document.getElementById('spin');
+    var root = document.documentElement, metaTheme = document.querySelector('meta[name="theme-color"]');
+    var HEX = /^#[0-9a-fA-F]{6}$/, KEY = 'cx-pwa-theme', timer;
+
+    function paint(t) {                                   // cores da marca: status bar, splash e faixa inferior
+      if (t && HEX.test(t.primary)) { root.style.setProperty('--brand', t.primary); root.style.setProperty('--sat', t.primary); metaTheme.setAttribute('content', t.primary); }
+      if (t && HEX.test(t.surface)) root.style.setProperty('--sab', t.surface);
+    }
+    try { paint(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { /* primeira abertura */ }
+
+    window.addEventListener('message', function (ev) {    // mensagem enviada pelo app (Theme.notifyShell)
+      if (!/^https:\/\/([a-z0-9-]+\.)*(googleusercontent\.com|google\.com)$/.test(ev.origin)) return;
+      var m = ev.data; if (!m || m.type !== 'cx-theme') return;
+      var t = { primary: m.primary, surface: m.surface }; paint(t);
+      try { localStorage.setItem(KEY, JSON.stringify(t)); } catch (e) { /* sem armazenamento */ }
+    });
+
+    function showHelp(msg) { spin.style.display = 'none'; helpMsg.textContent = msg; help.style.display = 'block'; }
+    function load() {
+      help.style.display = 'none'; spin.style.display = 'block'; splash.classList.remove('hide');
+      if (!cfg.APP_URL || /COLE_/.test(cfg.APP_URL)) { showHelp('Falta configurar o link do app. Edite o arquivo config.js (APP_URL).'); return; }
+      document.getElementById('open-direct').href = cfg.APP_URL;
+      if (!navigator.onLine) { showHelp('Sem conexão com a internet. Conecte-se para abrir o fluxo de caixa.'); return; }
+      clearTimeout(timer);
+      timer = setTimeout(function () { showHelp('Está demorando mais que o normal para abrir.'); }, 12000);
+      frame.src = cfg.APP_URL;
+    }
+    frame.addEventListener('load', function () {
+      if (!frame.getAttribute('src')) return;
+      clearTimeout(timer); splash.classList.add('hide');
+    });
+    document.getElementById('retry').addEventListener('click', load);
+    window.addEventListener('online', load);
+    load();
+
+    if ('serviceWorker' in navigator) {                   // atualiza sozinho quando sai uma versão nova da PWA
+      var had = !!navigator.serviceWorker.controller, reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () { if (had && !reloaded) { reloaded = true; location.reload(); } });
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
+  })();
+  </script>
+</body>
+</html>

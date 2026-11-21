@@ -1,0 +1,159 @@
+<script>
+const Lanc = {
+  tipo: '',
+  form(item) {
+    const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '' }, item || {});
+    const original = s.descricao, originalContato = s.contato_nome, OUTRO = '__outro';
+    const regra = Store.config.contato_regra || 'opcional';
+    const papel = () => s.tipo === 'entrada' ? 'cliente' : 'fornecedor';
+    const exigido = () => regra === 'sempre' || (regra === 'pendente' && s.status === 'pendente');
+    const itens = () => Store.catalogo.filter(i => i.tipo === s.tipo && (i.ativo || i.id === s.item_id));
+    const contatos = () => Store.contatos.filter(c => c[papel()] && (c.ativo || c.id === s.contato_id));
+    // Ao editar: reencontra item e contato (por id ou, em registros antigos, pelo nome)
+    if (s.id && !itens().some(i => i.id === s.item_id)) { const m = itens().find(i => norm(i.nome) === norm(s.descricao)); s.item_id = m ? m.id : ''; }
+    if (s.id && !Store.contatos.some(c => c.id === s.contato_id)) { const m = Store.contatos.find(c => norm(c.nome) === norm(s.contato_nome)); s.contato_id = m ? m.id : ''; }
+    let sel = s.item_id || (s.descricao ? OUTRO : (itens().length ? '' : OUTRO)), csel = s.contato_id || (s.contato_nome ? OUTRO : ''), lastAuto = '';
+
+    const formaOpts = FORMAS.map(f => `<option value="${f[0]}">${f[1]}</option>`).join('') + (s.id && !s.forma ? '<option value="">Não informado</option>' : '');
+    const body = `
+      <div class="seg" data-f="tipo"><button data-v="entrada">Entrada</button><button data-v="saida">Saída</button></div>
+      <label>Valor<input id="f-valor" inputmode="numeric" data-money placeholder="R$ 0,00" autocomplete="off"></label>
+      <label><span id="f-item-l"></span><select id="f-item"></select></label>
+      <label id="f-man-w" hidden><span id="f-desc-l">Descrição</span><input id="f-desc" maxlength="200" autocomplete="off"></label>
+      <label><span id="f-cont-l"></span><select id="f-cont"></select></label>
+      <label id="f-cman-w" hidden><span id="f-cnome-l"></span><input id="f-cnome" maxlength="80" autocomplete="off"></label>
+      <div class="two"><label>Data<input id="f-data" type="date"></label><label>Categoria<select id="f-cat"></select></label></div>
+      <label><span id="f-forma-l"></span><select id="f-forma">${formaOpts}</select></label>
+      <div class="seg" data-f="status"><button data-v="pago">Realizado</button><button data-v="pendente">Pendente</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar lançamento</button></div>`;
+
+    UI.modal(s.id ? 'Editar lançamento' : 'Novo lançamento', body, (box, close) => {
+      const el = id => $('#' + id, box), ent = () => s.tipo === 'entrada';
+      el('f-valor').value = moneyFmt(s.valor); el('f-data').value = s.data; el('f-desc').value = s.descricao; el('f-cnome').value = s.contato_nome; el('f-forma').value = s.forma;
+
+      const fillCats = () => {
+        const opts = Store.categorias.filter(c => c.tipo === s.tipo && (c.ativo || c.id === s.categoria_id));
+        if (!opts.some(c => c.id === s.categoria_id)) s.categoria_id = opts[0] ? opts[0].id : '';
+        el('f-cat').innerHTML = opts.length ? opts.map(c => `<option value="${c.id}" ${c.id === s.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')
+          : '<option value="">Cadastre uma categoria</option>';
+      };
+      const fillItens = () => {
+        el('f-item').innerHTML = '<option value="">Selecione…</option>' + itens().map(i => `<option value="${i.id}">${esc(i.nome)}</option>`).join('')
+          + `<option value="${OUTRO}">Outro (digitar manualmente)</option>`;
+        el('f-item').value = sel; el('f-man-w').hidden = sel !== OUTRO;
+      };
+      const fillContatos = () => {
+        el('f-cont').innerHTML = `<option value="">${exigido() ? 'Selecione…' : 'Não informar'}</option>` + contatos().map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+          + `<option value="${OUTRO}">Outro (digitar manualmente)</option>`;
+        el('f-cont').value = csel; el('f-cman-w').hidden = csel !== OUTRO;
+      };
+      const labels = () => {
+        el('f-item-l').textContent = ent() ? 'Produto ou serviço' : 'Despesa';
+        el('f-desc-l').textContent = ent() ? 'Descrição do produto ou serviço' : 'Descrição da despesa';
+        el('f-desc').placeholder = ent() ? 'Ex.: Corte e escova' : 'Ex.: Gasolina';
+        el('f-cont-l').textContent = (ent() ? 'Cliente' : 'Fornecedor') + (exigido() ? '' : ' (opcional)');
+        el('f-cnome-l').textContent = 'Nome do ' + papel();
+        el('f-forma-l').textContent = ent() ? 'Forma de recebimento' : 'Forma de pagamento';
+      };
+
+      bindSeg(box, s, f => {
+        if (f === 'tipo') {
+          s.item_id = ''; el('f-desc').value = ''; sel = itens().length ? '' : OUTRO; lastAuto = '';
+          s.contato_id = ''; csel = ''; el('f-cnome').value = '';
+          fillItens(); fillCats();
+        }
+        labels(); fillContatos(); // o status "pendente" pode tornar o contato obrigatório
+      });
+      labels(); fillItens(); fillCats(); fillContatos();
+
+      el('f-item').onchange = () => {
+        sel = el('f-item').value; el('f-man-w').hidden = sel !== OUTRO;
+        if (sel === OUTRO) { s.item_id = ''; el('f-desc').focus(); return; }
+        const it = Store.catalogo.find(i => i.id === sel); s.item_id = sel;
+        if (!it) return;
+        if (it.categoria_id && Store.categorias.some(c => c.id === it.categoria_id && c.tipo === s.tipo && c.ativo)) { s.categoria_id = it.categoria_id; fillCats(); }
+        const v = el('f-valor');
+        if (it.preco !== '' && (v.value === '' || v.value === lastAuto)) { lastAuto = moneyFmt(it.preco); v.value = lastAuto; }
+      };
+      el('f-cont').onchange = () => {
+        csel = el('f-cont').value; el('f-cman-w').hidden = csel !== OUTRO;
+        s.contato_id = csel && csel !== OUTRO ? csel : '';
+        if (csel === OUTRO) el('f-cnome').focus();
+      };
+
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          // --- item / descrição ---
+          let descricao = '', item_id = '', salvar = false;
+          if (sel === OUTRO) {
+            descricao = el('f-desc').value.trim();
+            const igual = Store.catalogo.find(i => i.tipo === s.tipo && norm(i.nome) === norm(descricao));
+            if (igual) item_id = igual.id; // já existe no catálogo: apenas vincula
+            else if (descricao && (!s.id || descricao !== original)) {
+              const r = await UI.confirm(`Deseja salvar “${descricao}” no catálogo para agilizar os próximos lançamentos?`,
+                { title: 'Adicionar ao catálogo?', yes: 'Salvar no catálogo', no: 'Só neste lançamento', danger: false });
+              if (r === null) return; // fechou o aviso: volta ao formulário
+              salvar = r;
+            }
+          } else if (sel) {
+            const it = Store.catalogo.find(i => i.id === sel); descricao = it.nome; item_id = sel;
+          } else if (!(s.id && !original)) throw new Error('Selecione um item da lista ou escolha “Outro” para digitar.');
+
+          // --- cliente / fornecedor ---
+          const pp = papel(); let contato_id = '', contato_nome = '', salvarC = false;
+          if (csel === OUTRO) {
+            contato_nome = el('f-cnome').value.trim();
+            if (contato_nome) {
+              const ex = Store.contatos.find(c => norm(c.nome) === norm(contato_nome));
+              if (ex) {
+                contato_id = ex.id; contato_nome = ex.nome;
+                if (!ex[pp]) { // existe, mas só no outro papel
+                  const r = await UI.confirm(`“${ex.nome}” já está nos contatos como ${pp === 'cliente' ? 'fornecedor' : 'cliente'}. Deseja marcar também como ${pp}?`,
+                    { title: 'Atualizar contato?', yes: 'Marcar como ' + pp, no: 'Só neste lançamento', danger: false });
+                  if (r === null) return; salvarC = r;
+                }
+              } else if (!s.id || contato_nome !== originalContato) {
+                const r = await UI.confirm(`Deseja salvar “${contato_nome}” nos contatos como ${pp}?`,
+                  { title: 'Adicionar aos contatos?', yes: 'Salvar nos contatos', no: 'Só neste lançamento', danger: false });
+                if (r === null) return; salvarC = r;
+              }
+            }
+          } else if (csel) {
+            const c = Store.contatos.find(x => x.id === csel); contato_id = csel; contato_nome = c ? c.nome : '';
+          }
+          if (exigido() && !contato_nome) throw new Error(`Informe o ${pp} (regra definida em Ajustes).`);
+
+          await API.call('lancamentos.save', { id: s.id, tipo: s.tipo, status: s.status, valor: parseMoney(el('f-valor').value),
+            descricao, item_id, salvar_catalogo: salvar, contato_id, contato_nome, salvar_contato: salvarC,
+            data: el('f-data').value, categoria_id: el('f-cat').value, forma: el('f-forma').value });
+          if (salvar) Store.catalogo = await API.call('catalogo.list');
+          if (salvarC) Store.contatos = await API.call('contatos.list');
+          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); App.refresh();
+        });
+        if (del && await UI.confirm('Excluir este lançamento?')) UI.busy(del, async () => {
+          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); App.refresh();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Lançamentos</h1><small>Entradas e saídas do período</small></div></div>`));
+    v.append(monthBar(() => App.refresh()));
+    v.append(h(`<div class="seg" data-f="tipo"><button data-v="">Todos</button><button data-v="entrada">Entradas</button><button data-v="saida">Saídas</button></div>`));
+    bindSeg(v, Lanc, () => App.refresh());
+    const rows = await API.call('lancamentos.list', { mes: Store.mes, tipo: Lanc.tipo });
+    const list = h('<div class="list"></div>');
+    list.innerHTML = rows.length ? rows.map(l => { const c = catOf(l.categoria_id), e = l.tipo === 'entrada'; return `
+      <button class="item" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
+        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${esc(c.nome)} · ${fmtDate(l.data)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''} ${l.status === 'pendente' ? '<i class="chip warn">Pendente</i>' : ''}</small></span>
+        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b></button>`; }).join('')
+      : '<div class="empty">Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.</div>';
+    list.onclick = ev => { const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id)); };
+    v.append(list);
+  }
+});
+</script>

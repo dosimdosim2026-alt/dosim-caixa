@@ -1,0 +1,51 @@
+{
+  "comentario": "Colunas que JÁ existem em planilhas em uso. Só podem crescer no fim. Atualize este arquivo ao publicar uma versão com novas colunas.",
+  "versao": "1.0.0",
+  "schemas": {
+    "categorias": [
+      "id",
+      "nome",
+      "tipo",
+      "cor",
+      "ativo",
+      "criado_em"
+    ],
+    "lancamentos": [
+      "id",
+      "data",
+      "tipo",
+      "categoria_id",
+      "descricao",
+      "valor",
+      "status",
+      "criado_em",
+      "forma",
+      "item_id",
+      "contato_id",
+      "contato_nome"
+    ],
+    "catalogo": [
+      "id",
+      "tipo",
+      "nome",
+      "categoria_id",
+      "preco",
+      "ativo",
+      "criado_em"
+    ],
+    "contatos": [
+      "id",
+      "nome",
+      "telefone",
+      "obs",
+      "cliente",
+      "fornecedor",
+      "ativo",
+      "criado_em"
+    ],
+    "config": [
+      "chave",
+      "val"
+    ]
+  }
+}

@@ -1,0 +1,91 @@
+<script>
+App.register({ id: 'config', label: 'Ajustes', icon: 'settings', order: 90, refreshable: false,
+  render(v) {
+    const d = Object.assign({}, Store.config);
+    let saved = JSON.stringify(d);
+    const dirty = () => JSON.stringify(d) !== saved;
+    const presets = [['Rosé', '#BD647D', '#4E9F7D', '#C8553D'], ['Índigo', '#4F46E5', '#10B981', '#EF4444'], ['Oceano', '#0284C7', '#14B8A6', '#EF4444'], ['Esmeralda', '#047857', '#F59E0B', '#DC2626'], ['Grafite', '#27272A', '#22C55E', '#EF4444']];
+    v.innerHTML = `
+      <div class="head sticky">
+        <div><h1>Ajustes <i class="chip warn" id="s-dirty" hidden>Não salvo</i></h1><small>Aparência e regras do sistema</small></div>
+        <div class="row head-actions"><button class="btn primary" data-save>Salvar</button>
+          <div class="menu-wrap"><button class="ib" data-menu aria-label="Mais opções" aria-haspopup="true" aria-expanded="false">${ico('dots')}</button>
+            <div class="menu" hidden><button data-reset>Restaurar padrão</button></div></div></div></div>
+      <div class="grid2" style="grid-template-columns:1fr">
+      <div class="card"><h3>Identidade</h3>
+        <label>Nome da empresa<input id="s-emp" maxlength="40"></label>
+        <div class="logo-edit"><div class="logo"></div><div style="flex:1">
+          <div class="row"><button class="btn" data-up>Enviar logo</button><button class="btn" data-rm>Remover</button></div>
+          <input id="s-file" type="file" accept="image/*" hidden></div></div>
+        <label>…ou endereço (URL) da logo<input id="s-logo" placeholder="https://"></label></div>
+      <div class="card"><h3>Paleta de cores</h3>
+        <div class="swatches">${presets.map((p, i) => `<button class="preset" data-p="${i}"><i style="background:${p[1]}"></i><i style="background:${p[2]}"></i>${p[0]}</button>`).join('')}</div>
+        <div class="two"><label>Cor principal<input id="s-pri" type="color"></label><label>Cor das entradas<input id="s-acc" type="color"></label></div>
+        <label>Cor das saídas<input id="s-dan" type="color"></label></div>
+      <div class="card"><h3>Aparência</h3>
+        <div class="seg" data-f="tema"><button data-v="auto">Automático</button><button data-v="light">Claro</button><button data-v="dark">Escuro</button></div>
+        <label>Arredondamento dos cantos<input id="s-rad" type="range" min="4" max="26"></label></div>
+      <div class="card"><h3>Lançamentos</h3>
+        <small>Cliente (nas entradas) e fornecedor (nas saídas) é obrigatório:</small>
+        <div class="seg" data-f="contato_regra" style="margin-top:8px"><button data-v="opcional">Nunca</button><button data-v="pendente">Se pendente</button><button data-v="sempre">Sempre</button></div>
+        <small>“Se pendente” exige identificar quem deve ou a quem você deve pagar. Vale também ao editar lançamentos antigos.</small></div>
+      </div>`;
+
+    const f = { 's-emp': 'empresa', 's-logo': 'logo', 's-pri': 'primary', 's-acc': 'accent', 's-dan': 'danger', 's-rad': 'radius' };
+    const menu = $('.menu', v), menuBtn = $('[data-menu]', v);
+    const closeMenu = () => { menu.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); };
+
+    // Alterações não salvas: aviso visual + confirmação ao sair da tela (ou fechar a aba)
+    const guard = () => UI.confirm('Você alterou os ajustes e ainda não salvou. Se sair agora, as alterações serão descartadas.',
+      { title: 'Sair sem salvar?', yes: 'Sair sem salvar', no: 'Continuar editando' }).then(r => r === true);
+    const mark = () => {
+      const dt = dirty();
+      $('#s-dirty', v).hidden = !dt;
+      App.leaveGuard = dt ? guard : null;
+      window.onbeforeunload = dt ? e => { e.preventDefault(); e.returnValue = ''; return ''; } : null;
+    };
+
+    const bindLogo = () => { $('.logo-edit .logo', v).innerHTML = d.logo ? `<img src="${esc(d.logo)}" alt="">` : esc((d.empresa || '?')[0].toUpperCase()); };
+    const paint = () => { Object.keys(f).forEach(id => { $('#' + id, v).value = d[f[id]]; }); Theme.apply(d); bindLogo(); mark(); };
+    const repaintSeg = bindSeg(v, d, () => { Theme.apply(d); mark(); });
+    paint();
+
+    v.addEventListener('input', e => { const k = f[e.target.id]; if (k) { d[k] = e.target.value; Theme.apply(d); bindLogo(); mark(); } });
+    v.addEventListener('click', e => {
+      const mb = e.target.closest('[data-menu]');
+      if (mb) { menu.hidden = !menu.hidden; mb.setAttribute('aria-expanded', String(!menu.hidden)); return; }
+      if (!e.target.closest('.menu')) closeMenu();
+      const p = e.target.closest('[data-p]'), save = e.target.closest('[data-save]');
+      if (p) { const x = presets[p.dataset.p]; d.primary = x[1]; d.accent = x[2]; d.danger = x[3]; paint(); }
+      if (e.target.closest('[data-up]')) $('#s-file', v).click();
+      if (e.target.closest('[data-rm]')) { d.logo = ''; paint(); }
+      if (e.target.closest('[data-reset]')) {
+        closeMenu(); Object.assign(d, { primary: '#4F46E5', accent: '#10B981', danger: '#EF4444', tema: 'auto', radius: '14' });
+        paint(); repaintSeg(); UI.toast(dirty() ? 'Padrão restaurado. Toque em Salvar para aplicar.' : 'Os ajustes já estão no padrão.');
+      }
+      if (save) {
+        if (!dirty()) { UI.toast('Nenhuma alteração para salvar.'); return; }
+        UI.busy(save, async () => {
+          Store.config = await API.call('settings.save', d);
+          Object.assign(d, Store.config); saved = JSON.stringify(d);
+          Theme.apply(Store.config); mark(); UI.toast('Ajustes salvos');
+        });
+      }
+    });
+
+    $('#s-file', v).onchange = ev => {
+      const file = ev.target.files[0]; if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 192 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        d.logo = c.toDataURL('image/png');
+        if (d.logo.length > 45000) { d.logo = ''; UI.toast('Imagem muito detalhada. Use uma logo mais simples ou uma URL.', true); }
+        paint();
+      };
+      img.src = URL.createObjectURL(file);
+    };
+  }
+});
+</script>

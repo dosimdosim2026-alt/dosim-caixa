@@ -1,0 +1,176 @@
+<script>
+/* ===== Utilitários ===== */
+const $ = (s, e) => (e || document).querySelector(s), $$ = (s, e) => [...(e || document).querySelectorAll(s)];
+const h = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const pad = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const fmtDate = d => String(d).split('-').reverse().slice(0, 2).join('/');
+/* Máscara bancária: digita-se só números e eles entram da direita para a esquerda (1000 -> R$ 10,00) */
+const maskMoney = v => {
+  const d = String(v).replace(/\D/g, '').replace(/^0+/, '').slice(0, 12);
+  if (!d) return '';
+  const p = d.padStart(3, '0');
+  return 'R$ ' + p.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + p.slice(-2);
+};
+const moneyFmt = n => n === '' || n == null ? '' : maskMoney(String(Math.round(Number(n) * 100)));
+const parseMoney = v => { const d = String(v).replace(/\D/g, ''); return d ? Number(d) / 100 : ''; };
+document.addEventListener('input', e => { if (e.target.matches && e.target.matches('[data-money]')) e.target.value = maskMoney(e.target.value); });
+document.addEventListener('focusin', e => { const t = e.target; if (t.matches && t.matches('[data-money]')) setTimeout(() => t.setSelectionRange(t.value.length, t.value.length), 0); });
+
+const ICONS = {
+  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  list:'<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  tag:'<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+  settings:'<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  up:'<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+  down:'<line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  box:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+  dots:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+};
+const ico = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
+
+/* ===== API e estado ===== */
+const API = { call: (route, p, pin) => new Promise((ok, no) =>
+  google.script.run.withSuccessHandler(ok).withFailureHandler(e => no(new Error(e.message || String(e)))).api(route, p || {}, pin === undefined ? Store.pin : pin)) };
+const Store = { config: {}, categorias: [], catalogo: [], contatos: [], pin: '', mes: today().slice(0, 7) };
+const FORMAS = [['pix', 'Pix', 'Pix'], ['dinheiro', 'Dinheiro (espécie)', 'Dinheiro'], ['credito', 'Cartão de crédito', 'Crédito'],
+                ['debito', 'Cartão de débito', 'Débito'], ['transferencia', 'Transferência bancária', 'Transferência']];
+const formaCurta = v => (FORMAS.find(f => f[0] === v) || [])[2] || '';
+const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+const catOf = id => Store.categorias.find(c => c.id === id) || { nome: 'Sem categoria', cor: '#94A3B8' };
+
+/* ===== UI helpers ===== */
+const UI = {
+  toast(msg, err) {
+    const t = h(`<div class="toast ${err ? 'err' : ''}">${esc(msg)}</div>`);
+    document.body.append(t); setTimeout(() => t.classList.add('show'), 10);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3200);
+  },
+  modal(title, body, mount, onDismiss) {
+    const m = h(`<div class="ov"><div class="sheet"><div class="sh-head"><b>${esc(title)}</b><button class="ib" data-x aria-label="Fechar">${ico('x')}</button></div><div class="sh-body"></div></div></div>`);
+    const close = byUser => { m.classList.remove('show'); setTimeout(() => m.remove(), 200); if (byUser === true && onDismiss) onDismiss(); };
+    const box = $('.sh-body', m); box.innerHTML = body;
+    m.onclick = e => { if (e.target === m || e.target.closest('[data-x]')) close(true); };
+    document.body.append(m); requestAnimationFrame(() => m.classList.add('show'));
+    if (mount) mount(box, close); return close;
+  },
+  /** Resolve true (confirmou), false (recusou) ou null (fechou sem escolher). */
+  confirm(msg, o) {
+    o = Object.assign({ title: 'Confirmar exclusão', yes: 'Excluir', no: 'Cancelar', danger: true }, o || {});
+    return new Promise(res => UI.modal(o.title,
+      `<p class="muted" style="margin-bottom:18px">${esc(msg)}</p><div class="row end"><button class="btn" data-n>${esc(o.no)}</button><button class="btn ${o.danger ? 'danger' : 'primary'}" data-y>${esc(o.yes)}</button></div>`,
+      (box, close) => { box.onclick = e => {
+        if (e.target.closest('[data-y]')) { res(true); close(); }
+        if (e.target.closest('[data-n]')) { res(false); close(); } }; },
+      () => res(null)));
+  },
+  async busy(btn, fn) { btn.disabled = true; try { return await fn(); } catch (e) { UI.toast(e.message, true); } finally { btn.disabled = false; } }
+};
+
+/** Botões segmentados: <div class="seg" data-f="campo"><button data-v="valor">…</button></div> */
+function bindSeg(root, s, cb) {
+  const paint = () => $$('.seg[data-f]', root).forEach(g => $$('button', g).forEach(b => b.classList.toggle('on', String(s[g.dataset.f]) === b.dataset.v)));
+  root.addEventListener('click', e => {
+    const b = e.target.closest('.seg[data-f] button'); if (!b) return;
+    const f = b.parentNode.dataset.f, v = b.dataset.v;
+    s[f] = v === 'true' ? true : v === 'false' ? false : v; paint(); if (cb) cb(f);
+  });
+  paint(); return paint;
+}
+
+/** Seletor de mês compartilhado entre os módulos. */
+function monthBar(onChange) {
+  const [y, m] = Store.mes.split('-').map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const el = h(`<div class="mbar"><button class="ib" data-d="-1" aria-label="Mês anterior">‹</button><span>${label}</span><button class="ib" data-d="1" aria-label="Próximo mês">›</button></div>`);
+  el.onclick = e => {
+    const b = e.target.closest('[data-d]'); if (!b) return;
+    const d = new Date(y, m - 1 + Number(b.dataset.d), 1);
+    Store.mes = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; onChange();
+  };
+  return el;
+}
+
+/* ===== Tema (aplica as configurações de UI) ===== */
+const Theme = {
+  apply(c) {
+    const r = document.documentElement.style;
+    r.setProperty('--primary', c.primary); r.setProperty('--accent', c.accent);
+    r.setProperty('--danger', c.danger); r.setProperty('--radius', c.radius + 'px');
+    const dark = c.tema === 'dark' || (c.tema === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    $$('.logo').forEach(l => l.innerHTML = c.logo ? `<img src="${esc(c.logo)}" alt="">` : esc((c.empresa || '?')[0].toUpperCase()));
+    $$('.brand-name').forEach(n => n.textContent = c.empresa);
+    document.title = c.empresa + ' · Fluxo de caixa';
+    Theme.notifyShell(c);
+  },
+  /** Quando o app roda dentro da PWA (iframe), informa as cores para pintar status bar e barra inferior. */
+  notifyShell(c) {
+    try {
+      if (window.top === window) return;
+      const cs = getComputedStyle(document.documentElement);
+      window.top.postMessage({ type: 'cx-theme', primary: c.primary, surface: cs.getPropertyValue('--surface').trim(), bg: cs.getPropertyValue('--bg').trim() }, '*');
+    } catch (e) { /* fora da PWA: ignora */ }
+  }
+};
+
+/* ===== App: registro de módulos + navegação ===== */
+const App = {
+  mods: [],
+  groups: { cadastros: { label: 'Cadastros', icon: 'grid' } }, // no celular, módulos do mesmo grupo dividem uma aba
+  /** register({ id, label, icon, order, group?, render(containerEl) }) */
+  register(m) { this.mods.push(m); this.mods.sort((a, b) => (a.order || 50) - (b.order || 50)); },
+  shell() {
+    const btn = m => `<button class="nav" data-id="${m.id}">${ico(m.icon)}<span>${esc(m.label)}</span></button>`;
+    const items = this.mods.map(btn).join(''), seen = {};
+    const tabs = this.mods.map(m => {
+      if (!m.group) return btn(m);
+      if (seen[m.group]) return ''; seen[m.group] = 1;
+      const g = this.groups[m.group];
+      return `<button class="nav" data-id="${m.id}" data-group="${m.group}">${ico(g.icon)}<span>${esc(g.label)}</span></button>`;
+    }).join('');
+    $('#app').innerHTML = `
+      <aside class="side"><div class="brand"><div class="logo"></div><span class="brand-name"></span></div>
+        <div class="grow-nav">${items}</div><button class="btn primary" data-new>${ico('plus')} Novo lançamento</button></aside>
+      <header class="top"><div class="brand"><div class="logo"></div><span class="brand-name"></span></div></header>
+      <main id="view"></main><nav class="tabbar">${tabs}</nav>
+      <button class="fab" data-new aria-label="Novo lançamento">${ico('plus')}</button>`;
+    $('#app').onclick = e => {
+      const n = e.target.closest('.nav'), g = e.target.closest('[data-go]');
+      if (n) this.go(n.dataset.id); if (g) this.go(g.dataset.go);
+      if (e.target.closest('[data-new]')) Lanc.form();
+    };
+  },
+  /** Módulo com alterações pendentes define App.leaveGuard (async, true = pode sair). */
+  leaveGuard: null,
+  async go(id) {
+    if (this.leaveGuard) {
+      const ok = await this.leaveGuard(); if (!ok) return;
+      this.leaveGuard = null; window.onbeforeunload = null;
+    }
+    this.cur = this.mods.find(m => m.id === id);
+    Theme.apply(Store.config); // descarta prévias de tema não salvas
+    $$('.nav').forEach(n => n.classList.toggle('on', n.dataset.id === id || (!!n.dataset.group && n.dataset.group === this.cur.group)));
+    const old = $('#view'), v = old.cloneNode(false); old.replaceWith(v); // elemento novo = sem listeners antigos
+    v.classList.add('busy'); scrollTo(0, 0);
+    if (this.cur.group) v.append(h(`<div class="seg subnav">${this.mods.filter(m => m.group === this.cur.group).map(m =>
+      `<button data-go="${m.id}" class="${m.id === id ? 'on' : ''}">${esc(m.label)}</button>`).join('')}</div>`));
+    try { await this.cur.render(v); }
+    catch (e) { v.append(h(`<div class="empty">Não foi possível carregar. ${esc(e.message)}</div>`)); }
+    v.classList.remove('busy');
+  },
+  refresh() { return this.cur && this.cur.refreshable === false ? Promise.resolve() : this.go(this.cur.id); }, // refreshable:false = não recarrega (evita perder edições)
+  async start() {
+    try { await Auth.ensure(); const b = await API.call('core.bootstrap'); Store.config = b.config; Store.categorias = b.categorias; Store.catalogo = b.catalogo; Store.contatos = b.contatos; }
+    catch (e) { $('#app').innerHTML = `<div class="empty" style="margin:auto">Erro ao iniciar: ${esc(e.message)}</div>`; return; }
+    this.shell(); Theme.apply(Store.config); this.go(this.mods[0].id);
+  }
+};
+</script>

@@ -1,0 +1,16 @@
+{
+  "name": "dosim-caixa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fluxo de caixa DoSim — Google Apps Script + PWA (GitHub Pages)",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node tests/run.js",
+    "test:backend": "node tests/run.js backend",
+    "test:frontend": "node tests/run.js frontend",
+    "test:static": "node tests/run.js static",
+    "test:regression": "node tests/run.js regression",
+    "icons": "python scripts/make-icons.py"
+  }
+}

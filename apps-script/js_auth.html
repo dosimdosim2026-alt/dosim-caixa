@@ -1,0 +1,47 @@
+<script>
+/** Tela de PIN (só aparece se o servidor tiver APP_PIN). */
+const Auth = {
+  KEY: 'cx-pin',
+  saved() { try { return localStorage.getItem(this.KEY) || ''; } catch (e) { return ''; } },
+  save(pin) { try { if (pin) localStorage.setItem(this.KEY, pin); else localStorage.removeItem(this.KEY); } catch (e) { /* sem armazenamento: pede o PIN a cada abertura */ } },
+
+  async ensure() {
+    const st = await API.call('auth.status', {}, '');
+    if (!st.required) return;
+    const guardado = this.saved();
+    if (guardado) {
+      try { await API.call('auth.check', {}, guardado); Store.pin = guardado; return; }
+      catch (e) { this.save(''); }
+    }
+    await this.prompt(st.brand || {});
+  },
+
+  prompt(brand) {
+    return new Promise(resolve => {
+      if (/^#[0-9a-f]{6}$/i.test(brand.primary || '')) document.documentElement.style.setProperty('--primary', brand.primary);
+      const logo = brand.logo ? `<img src="${esc(brand.logo)}" alt="">` : esc(((brand.empresa || '?')[0] || '?').toUpperCase());
+      const box = h(`<div class="lock"><div class="lock-card">
+        <div class="logo">${logo}</div><h1>${esc(brand.empresa || 'Fluxo de caixa')}</h1>
+        <p class="muted">Digite o PIN para entrar</p>
+        <input id="lk-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN" aria-label="PIN">
+        <label class="chk"><input type="checkbox" id="lk-keep" checked> Manter neste aparelho</label>
+        <p class="lock-err" id="lk-err" role="alert" hidden></p>
+        <button class="btn primary" id="lk-go">Entrar</button></div></div>`);
+      document.body.append(box);
+      const pinEl = $('#lk-pin', box), err = $('#lk-err', box), go = $('#lk-go', box);
+      const enter = async () => {
+        const pin = pinEl.value; if (!pin) return;
+        go.disabled = true; err.hidden = true;
+        try {
+          await API.call('auth.check', {}, pin);
+          Store.pin = pin; this.save($('#lk-keep', box).checked ? pin : '');
+          box.remove(); resolve();
+        } catch (e) { err.textContent = e.message; err.hidden = false; pinEl.value = ''; pinEl.focus(); }
+        finally { go.disabled = false; }
+      };
+      go.onclick = enter; pinEl.onkeydown = e => { if (e.key === 'Enter') enter(); };
+      pinEl.focus();
+    });
+  }
+};
+</script>

@@ -1,0 +1,64 @@
+<script>
+const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+/** Gráfico de colunas (entradas x saídas) na largura real W: cabe no celular, sem rolagem horizontal.
+ *  Valor em reais no topo de cada coluna, na diagonal. Celular (<460px): sem centavos. */
+function barChartSvg(serie, W) {
+  const max = Math.max(1, ...serie.flatMap(s => [s.entradas, s.saidas]));
+  const narrow = W < 460, fs = W < 300 ? 9 : narrow ? 10 : 11;
+  const fmt = narrow ? n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }) : brl;
+  // Folga calculada pelo maior rótulo (diagonal a 45°): cabe de R$ 9,99 a milhões, sem cortar no topo nem na direita
+  const maior = Math.max(...serie.flatMap(s => [fmt(s.entradas), fmt(s.saidas)]).map(t => t.length));
+  const proj = Math.ceil(maior * fs * 0.62 * Math.SQRT1_2);
+  const padL = 4, padR = Math.max(narrow ? 42 : 58, proj + 4), top = Math.max(narrow ? 56 : 64, proj + 12), ALT = 120, base = top + ALT, H = base + 26;
+  const gw = (W - padL - padR) / serie.length, bw = Math.min(26, gw * 0.3), gap = Math.max(3, gw * 0.06);
+  const col = (x, val, cls) => {
+    if (!val) return '';
+    const hh = Math.max(2, val / max * ALT), y = base - hh;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 3)}" fill="var(--${cls})"/>
+      <text class="v ${cls}" style="font-size:${fs}px" transform="translate(${x + bw / 2} ${y - 5}) rotate(-45)">${fmt(val)}</text>`;
+  };
+  return `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Entradas e saídas dos últimos 6 meses"><line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--border)"/>` +
+    serie.map((s, i) => {
+      const x = padL + i * gw + (gw - (2 * bw + gap)) / 2;
+      return col(x, s.entradas, 'in') + col(x + bw + gap, s.saidas, 'out') +
+        `<text x="${x + bw + gap / 2}" y="${base + 17}" text-anchor="middle" style="font-size:${fs}px">${MESES[+s.mes.slice(5) - 1]}</text>`;
+    }).join('') + '</svg>';
+}
+
+App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Painel</h1><small>Resumo do fluxo de caixa</small></div></div>`));
+    v.append(monthBar(() => App.refresh()));
+    const d = await API.call('dashboard.summary', { mes: Store.mes });
+    const draw = wrap => { const W = Math.floor(wrap.clientWidth); if (W >= 120) wrap.innerHTML = barChartSvg(d.serie, W); };
+    const maxCat = Math.max(1, ...d.porCategoria.map(c => c.total));
+    const cats = d.porCategoria.length ? d.porCategoria.map(c =>
+      `<div class="cat-row"><span class="nm">${esc(c.nome)}</span><span>${brl(c.total)}</span></div>
+       <div class="bar" style="--c:${esc(c.cor)}"><i style="width:${c.total / maxCat * 100}%"></i></div>`).join('')
+      : '<div class="empty">Sem saídas realizadas neste mês.</div>';
+    const pend = d.porContato.length ? `<div class="card" style="margin-top:12px"><h3>Pendências por contato</h3>${d.porContato.map(c => {
+      const net = c.aReceber - c.aPagar;
+      return `<div class="pend"><span class="grow"><b>${esc(c.nome)}</b><br><small>${c.aReceber ? 'A receber ' + brl(c.aReceber) : ''}${c.aReceber && c.aPagar ? ' · ' : ''}${c.aPagar ? 'A pagar ' + brl(c.aPagar) : ''}</small></span>
+        <b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}${brl(Math.abs(net))}</b></div>`; }).join('')}
+      <small>Considera todos os meses. Positivo: o contato deve a você. Negativo: você deve a ele.</small></div>` : '';
+    v.append(h(`<div>
+      <div class="kpis">
+        <div class="card kpi hero"><span>Saldo do mês</span><b>${brl(d.saldo)}</b></div>
+        <div class="card kpi"><span class="pos">${ico('up')} Entradas</span><b>${brl(d.entradas)}</b></div>
+        <div class="card kpi"><span class="neg">${ico('down')} Saídas</span><b>${brl(d.saidas)}</b></div>
+        <div class="card kpi wide"><span>${ico('clock')} Pendentes</span>
+          <small>A receber <b class="pos" style="font-size:15px">${brl(d.aReceber)}</b></small>
+          <small>A pagar <b class="neg" style="font-size:15px">${brl(d.aPagar)}</b></small></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h3>Últimos 6 meses</h3>
+          <div class="chart-wrap"></div>
+          <div class="row" style="gap:16px;margin-top:6px"><small><b class="pos">●</b> Entradas</small><small><b class="neg">●</b> Saídas</small></div></div>
+        <div class="card"><h3>Maiores saídas</h3>${cats}</div>
+      </div>${pend}</div>`));
+    const w = $('.chart-wrap', v); draw(w);
+    if (window.ResizeObserver) new ResizeObserver(() => draw(w)).observe(w);
+  }
+});
+</script>

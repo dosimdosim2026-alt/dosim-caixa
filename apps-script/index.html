@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('css') ?>
+</head>
+<body>
+  <div id="app" class="app"><div class="load" style="margin:auto">Carregando…</div></div>
+  <?!= include('js_core') ?>
+  <?!= include('js_auth') ?>
+  <?!= include('js_dashboard') ?>
+  <?!= include('js_lancamentos') ?>
+  <?!= include('js_catalogo') ?>
+  <?!= include('js_contatos') ?>
+  <?!= include('js_categorias') ?>
+  <?!= include('js_config') ?>
+  <script>App.start();</script>
+</body>
+</html>

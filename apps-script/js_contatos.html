@@ -1,0 +1,59 @@
+<script>
+/** Contatos: cadastro único de clientes e fornecedores (a mesma pessoa pode ser os dois). */
+const Contatos = {
+  filtro: '', q: '',
+  async reload() { Store.contatos = await API.call('contatos.list'); },
+  form(item) {
+    const s = Object.assign({ nome: '', telefone: '', obs: '', cliente: Contatos.filtro !== 'fornecedor', fornecedor: Contatos.filtro === 'fornecedor', ativo: true }, item || {});
+    const body = `
+      <label>Nome<input id="t-nome" maxlength="80" autocomplete="off"></label>
+      <label>Telefone ou WhatsApp (opcional)<input id="t-tel" type="tel" inputmode="tel" maxlength="30" autocomplete="off"></label>
+      <label>Observação (opcional)<input id="t-obs" maxlength="200" autocomplete="off"></label>
+      <div class="two"><label class="chk"><input type="checkbox" id="t-cli"> Cliente</label><label class="chk"><input type="checkbox" id="t-for"> Fornecedor</label></div>
+      <div class="seg" data-f="ativo"><button data-v="true">Ativo</button><button data-v="false">Inativo</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar contato</button></div>`;
+    UI.modal(s.id ? 'Editar contato' : 'Novo contato', body, (box, close) => {
+      const el = id => $('#' + id, box);
+      el('t-nome').value = s.nome; el('t-tel').value = s.telefone; el('t-obs').value = s.obs;
+      el('t-cli').checked = !!s.cliente; el('t-for').checked = !!s.fornecedor; bindSeg(box, s);
+      const done = msg => async () => { close(); UI.toast(msg); await Contatos.reload(); App.refresh(); };
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          await API.call('contatos.save', { id: s.id, ativo: s.ativo, nome: el('t-nome').value, telefone: el('t-tel').value,
+            obs: el('t-obs').value, cliente: el('t-cli').checked, fornecedor: el('t-for').checked });
+          await done('Contato salvo')();
+        });
+        if (del && await UI.confirm('Excluir este contato? Os lançamentos já feitos continuam com o nome.')) UI.busy(del, async () => {
+          await API.call('contatos.remove', { id: s.id }); await done('Contato excluído')();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'contatos', group: 'cadastros', label: 'Contatos', icon: 'users', order: 27,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Contatos</h1><small>Clientes e fornecedores em um só cadastro</small></div><button class="btn primary" data-add>${ico('plus')} Novo contato</button></div>`));
+    v.append(h(`<div class="seg" data-f="filtro"><button data-v="">Todos</button><button data-v="cliente">Clientes</button><button data-v="fornecedor">Fornecedores</button></div>`));
+    v.append(h(`<label><input id="t-busca" type="search" placeholder="Buscar contato" autocomplete="off" aria-label="Buscar contato"></label>`));
+    const list = h('<div class="list"></div>'); v.append(list);
+    await Contatos.reload();
+    const paint = () => {
+      const rows = Store.contatos.filter(c => (!Contatos.filtro || c[Contatos.filtro]) && norm(c.nome).includes(norm(Contatos.q)));
+      list.innerHTML = rows.length ? rows.map(c => `
+        <button class="item" data-id="${c.id}"><span class="dot" style="--c:var(--primary)">${ico('users')}</span>
+          <span class="grow"><b>${esc(c.nome)}</b><small>${esc(c.telefone || 'Sem telefone')}</small></span>
+          ${c.ativo ? '' : '<i class="chip">Inativo</i>'}${c.cliente ? '<i class="chip">Cliente</i>' : ''}${c.fornecedor ? '<i class="chip">Fornecedor</i>' : ''}</button>`).join('')
+        : `<div class="empty">${Contatos.q ? 'Nenhum contato encontrado.' : 'Nenhum contato cadastrado.<br>Cadastre aqui ou salve ao lançar um nome digitado manualmente.'}</div>`;
+    };
+    bindSeg(v, Contatos, paint); paint();
+    $('#t-busca', v).value = Contatos.q;
+    v.addEventListener('input', e => { if (e.target.id === 't-busca') { Contatos.q = e.target.value; paint(); } });
+    v.addEventListener('click', e => {
+      if (e.target.closest('[data-add]')) Contatos.form();
+      const b = e.target.closest('.item'); if (b) Contatos.form(Store.contatos.find(c => c.id === b.dataset.id));
+    });
+  }
+});
+</script>
