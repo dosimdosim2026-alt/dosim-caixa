@@ -5,14 +5,14 @@
   --shadow:0 1px 2px rgba(16,24,40,.04),0 10px 28px -14px rgba(16,24,40,.14);
   --primary-soft:color-mix(in srgb,var(--primary) 12%,transparent);
   --in:var(--accent);--out:var(--danger);
-  --topbar:59px;
+  --topbar:calc(59px + env(safe-area-inset-top));
   --font:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 }
 [data-theme=dark]{--bg:#0A0E18;--surface:#121827;--surface-2:#1A2236;--text:#E9EDF7;--muted:#8B97B1;--border:#222B43;--shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.7)}
 *{box-sizing:border-box;margin:0}
 [hidden]{display:none!important}
 html,body{min-height:100%}
-body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{padding-top:env(safe-area-inset-top);font-family:var(--font);background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button,input,select{font:inherit;color:inherit}
 button{-webkit-tap-highlight-color:transparent}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
@@ -21,9 +21,11 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
 .pos{color:var(--in)}.neg{color:var(--out)}
 
 /* Shell: mobile = topbar + tabbar | desktop = sidebar */
-.app{min-height:100vh;display:flex;flex-direction:column}
+.app{min-height:calc(100vh - env(safe-area-inset-top));display:flex;flex-direction:column}
 .side{display:none}
-.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;padding:12px 16px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+/* PWA no iPhone: a faixa do topo (status bar) fica na cor da marca */
+body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:var(--primary);z-index:100;pointer-events:none}
+.top{position:sticky;top:env(safe-area-inset-top);z-index:20;display:flex;align-items:center;padding:12px 16px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;min-width:0}
 .brand-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .logo{width:34px;height:34px;border-radius:10px;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:800;overflow:hidden;flex:none}

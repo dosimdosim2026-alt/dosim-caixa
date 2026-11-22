@@ -41,27 +41,32 @@ describe('PWA — manifesto e instalação', () => {
   });
 });
 
-describe('PWA — página-casco (index.html)', () => {
+describe('PWA — página gerada (pwa/index.html)', () => {
   test('tags para instalar no celular e ocupar a tela toda', () => {
     for (const t of ['rel="manifest"', 'rel="apple-touch-icon"', 'viewport-fit=cover', 'apple-mobile-web-app-capable" content="yes"',
                      'apple-mobile-web-app-status-bar-style" content="black-translucent"', 'mobile-web-app-capable" content="yes"'])
       assert.ok(index.includes(t), `falta ${t}`);
     assert.match(index, /env\(safe-area-inset-top\)/); assert.match(index, /env\(safe-area-inset-bottom\)/);
   });
-  test('abre o app em um iframe, carrega config.js e registra o service worker', () => {
-    assert.match(index, /<iframe id="app"/); assert.match(index, /<script src="config\.js">/); assert.match(index, /serviceWorker\.register\('sw\.js'\)/);
+  test('NÃO usa iframe: o app roda direto na página (iframe falha com várias contas Google / cookies bloqueados)', () => {
+    assert.ok(!/<iframe/i.test(index));
   });
-  test('só aceita mensagens de cor vindas do Google (googleusercontent.com / google.com)', () => {
-    assert.match(index, /googleusercontent\\\.com\|google\\\.com/); assert.match(index, /ev\.origin/);
-    assert.match(index, /\^#\[0-9a-fA-F\]\{6\}\$/);                       // só aceita cores hexadecimais
+  test('carrega o config.js antes do app, inicia o app e registra o service worker', () => {
+    assert.ok(index.indexOf('<script src="config.js">') > -1 && index.indexOf('<script src="config.js">') < index.indexOf('const API'));
+    assert.ok(index.indexOf('App.start();') > index.indexOf("id: 'config'"));
+    assert.match(index, /serviceWorker\.register\('sw\.js'\)/);
   });
-  test('script embutido tem sintaxe válida', () => {
-    const js = index.match(/<script>([\s\S]*?)<\/script>/)[1];
-    assert.doesNotThrow(() => new vm.Script(js));
+  test('está EM DIA com o código de apps-script/ (se falhar: npm run build)', () => {
+    const { build } = require('../../scripts/build-pwa');
+    assert.equal(index.replace(/\r\n/g, '\n'), build(), 'pwa/index.html desatualizado: rode "npm run build" e faça commit');
   });
-  test('o "type" da mensagem do app é o mesmo que a PWA espera (cx-theme)', () => {
-    const core = fs.readFileSync(path.join(__dirname, '..', '..', 'apps-script', 'js_core.html'), 'utf8');
-    assert.match(core, /type: 'cx-theme'/); assert.match(index, /'cx-theme'/);
+  test('todos os scripts embutidos têm sintaxe válida', () => {
+    const blocos = [...index.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+    assert.ok(blocos.length >= 9);
+    for (const js of blocos) assert.doesNotThrow(() => new vm.Script(js));
+  });
+  test('usa o transporte HTTP (API.http) e a cor da barra (setBarColor)', () => {
+    assert.match(index, /async http\(route, payload, pin\)/); assert.match(index, /setBarColor\(/);
   });
 });
 

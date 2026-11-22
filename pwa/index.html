@@ -2,8 +2,8 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <title>DoSim · Caixa</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>DoSim · Caixa</title>
   <meta name="theme-color" content="#9E4563">
   <meta name="description" content="Fluxo de caixa da DoSim">
   <link rel="manifest" href="manifest.webmanifest">
@@ -14,90 +14,895 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="DoSim">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --brand: #9E4563; --sat: var(--brand); --sab: #ffffff; }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; background: var(--brand); overflow: hidden; overscroll-behavior: none; }
-    /* O app ocupa a tela toda; as áreas seguras (notch / barra do iPhone) recebem as cores da marca */
-    #app { position: fixed; top: env(safe-area-inset-top); right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom);
-           left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border: 0; background: #fff; }
-    .sa { position: fixed; left: 0; right: 0; z-index: 1; pointer-events: none; }
-    #sa-top { top: 0; height: env(safe-area-inset-top); background: var(--sat); }
-    #sa-bottom { bottom: 0; height: env(safe-area-inset-bottom); background: var(--sab); }
-    #splash { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
-              gap: 22px; padding: 24px; background: var(--brand); color: #fff; text-align: center; transition: opacity .35s;
-              font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    #splash.hide { opacity: 0; pointer-events: none; }
-    #splash img { width: 132px; height: 132px; }
-    .spin { width: 28px; height: 28px; border: 3px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: r .9s linear infinite; }
-    @keyframes r { to { transform: rotate(360deg); } }
-    #help { display: none; max-width: 320px; }
-    #help a, #help button { display: inline-block; margin: 8px 6px 0; padding: 10px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.55);
-                            background: transparent; color: #fff; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
-    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } #splash { transition: none; } }
-  </style>
+:root{
+  --primary:#4F46E5;--accent:#10B981;--danger:#EF4444;--radius:14px;
+  --bg:#F5F6FA;--surface:#fff;--surface-2:#EFF1F7;--text:#101828;--muted:#667085;--border:#E4E7EF;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 10px 28px -14px rgba(16,24,40,.14);
+  --primary-soft:color-mix(in srgb,var(--primary) 12%,transparent);
+  --in:var(--accent);--out:var(--danger);
+  --topbar:calc(59px + env(safe-area-inset-top));
+  --font:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+[data-theme=dark]{--bg:#0A0E18;--surface:#121827;--surface-2:#1A2236;--text:#E9EDF7;--muted:#8B97B1;--border:#222B43;--shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.7)}
+*{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
+html,body{min-height:100%}
+body{padding-top:env(safe-area-inset-top);font-family:var(--font);background:var(--bg);color:var(--text);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
+.muted,small{color:var(--muted)}small{font-size:12.5px}
+.pos{color:var(--in)}.neg{color:var(--out)}
+
+/* Shell: mobile = topbar + tabbar | desktop = sidebar */
+.app{min-height:calc(100vh - env(safe-area-inset-top));display:flex;flex-direction:column}
+.side{display:none}
+/* PWA no iPhone: a faixa do topo (status bar) fica na cor da marca */
+body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:var(--primary);z-index:100;pointer-events:none}
+.top{position:sticky;top:env(safe-area-inset-top);z-index:20;display:flex;align-items:center;padding:12px 16px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;min-width:0}
+.brand-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:800;overflow:hidden;flex:none}
+.logo img{width:100%;height:100%;object-fit:contain;background:#fff}
+main{flex:1;width:100%;max-width:1100px;margin:0 auto;padding:18px 16px 120px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border)}
+.nav{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;font-weight:600;color:var(--muted);background:none;border:0;padding:6px 4px;border-radius:12px;cursor:pointer}
+.nav{font-size:10.5px;padding:6px 2px;min-width:0}.nav span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav svg{width:22px;height:22px}.nav.on{color:var(--primary)}
+.fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:25;width:56px;height:56px;border-radius:18px;border:0;background:var(--primary);color:#fff;display:grid;place-items:center;box-shadow:0 12px 24px -8px var(--primary);cursor:pointer}
+.fab svg{width:26px;height:26px}
+@media(min-width:900px){
+  .app{flex-direction:row}
+  .top,.tabbar,.fab{display:none}
+  .side{display:flex;flex-direction:column;gap:18px;width:256px;flex:none;position:sticky;top:0;height:100vh;padding:22px 14px;background:var(--surface);border-right:1px solid var(--border)}
+  .side .brand{flex-direction:column;align-items:center;text-align:center;gap:12px;padding:6px 8px 20px;border-bottom:1px solid var(--border);font-size:17px}
+  .side .logo{width:68px;height:68px;border-radius:20px;font-size:28px}
+  .side .brand-name{white-space:normal;overflow:visible;line-height:1.25}
+  .subnav{display:none}
+  .grow-nav{flex:1;display:flex;flex-direction:column;gap:4px}
+  .side .nav{flex:none;flex-direction:row;gap:12px;font-size:14px;padding:11px 14px;text-align:left}
+  .side .nav:hover{background:var(--surface-2)}.side .nav.on{background:var(--primary-soft)}
+  main{padding:36px 44px}
+  :root{--topbar:0px}
+}
+
+/* Blocos */
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+.card h3{font-size:15px;font-weight:700;margin-bottom:12px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0 12px}
+.kpi{display:flex;flex-direction:column;gap:6px}
+.kpi>span{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;font-weight:500}
+.kpi svg{width:15px;height:15px}
+.kpi b{font-size:22px;font-weight:800;letter-spacing:-.03em}
+.kpi.hero{grid-column:1/-1;border:0;color:#fff;background:linear-gradient(135deg,var(--primary),color-mix(in srgb,var(--primary) 55%,#000))}
+.kpi.hero>span{color:rgba(255,255,255,.78)}.kpi.hero b{font-size:32px;color:#fff}
+.kpi.wide{grid-column:1/-1}
+.grid2{display:grid;gap:12px}.grid2>*,.kpi{min-width:0}
+@media(min-width:900px){.kpis{grid-template-columns:repeat(4,1fr)}.kpi.hero,.kpi.wide{grid-column:auto}.grid2{grid-template-columns:3fr 2fr}}
+.sec-t{font-size:13px;font-weight:700;color:var(--muted);margin:20px 0 8px}
+
+/* Botões e campos */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:calc(var(--radius) - 3px);border:1px solid var(--border);background:var(--surface);font-weight:600;cursor:pointer;transition:background .15s,filter .15s}
+.btn:hover{background:var(--surface-2)}.btn svg{width:18px;height:18px}
+.btn.primary{background:var(--primary);border-color:transparent;color:#fff}.btn.primary:hover{filter:brightness(1.1);background:var(--primary)}
+.btn.danger{color:var(--danger)}.btn:disabled{opacity:.55;pointer-events:none}
+.ib{width:36px;height:36px;border-radius:10px;border:0;background:var(--surface-2);cursor:pointer;display:grid;place-items:center;font-size:18px;flex:none}
+.ib svg{width:18px;height:18px}
+label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:14px}
+input,select{height:46px;padding:0 12px;border-radius:calc(var(--radius) - 4px);border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;width:100%}
+input:focus,select:focus{outline:3px solid var(--primary-soft);border-color:var(--primary)}
+input[type=color]{padding:3px;cursor:pointer}input[type=range]{padding:0;height:28px;accent-color:var(--primary)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.seg{display:flex;padding:4px;gap:4px;border-radius:calc(var(--radius) - 2px);background:var(--surface-2);margin-bottom:14px}
+.seg button{flex:1;height:38px;border:0;border-radius:calc(var(--radius) - 5px);background:none;color:var(--muted);font-weight:600;cursor:pointer}
+.seg button.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.row{display:flex;gap:10px;align-items:center}.row.end{justify-content:flex-end;margin-top:6px}
+
+/* Cabeçalho fixo com ações (Ajustes) e menu de opções */
+.head.sticky{position:sticky;top:var(--topbar);z-index:15;background:var(--bg);padding:10px 0;margin:-10px 0 8px;align-items:center}
+.head h1{display:flex;align-items:center;gap:10px}
+.head-actions{flex:none}.head-actions .ib{width:44px;height:44px}
+.menu-wrap{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 6px);min-width:200px;z-index:30;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:calc(var(--radius) - 3px);box-shadow:var(--shadow)}
+.menu button{display:block;width:100%;text-align:left;padding:12px;border:0;border-radius:10px;background:none;font-weight:600;cursor:pointer}
+.menu button:hover{background:var(--surface-2)}
+
+/* Listas */
+.mbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-transform:capitalize;font-weight:700}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
+.item:hover{border-color:var(--primary)}
+.item .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.grow b,.grow small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c);flex:none}
+.dot svg{width:18px;height:18px}
+.chip{font-style:normal;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--surface-2)}
+.chip.warn{background:color-mix(in srgb,#F59E0B 20%,transparent);color:#B45309}
+.bar{height:8px;border-radius:9px;background:var(--surface-2);overflow:hidden;margin:6px 0 14px}
+.bar i{display:block;height:100%;border-radius:9px;background:var(--c)}
+.cat-row{display:flex;justify-content:space-between;gap:12px;font-size:14px;font-weight:600}.cat-row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.busy::after{content:'Carregando…';display:block;text-align:center;color:var(--muted);padding:40px 16px}
+.empty,.load{text-align:center;color:var(--muted);padding:40px 16px}
+svg.chart text{fill:var(--muted);font-size:11px;font-family:var(--font)}
+svg.chart text.v{font-size:11px;font-weight:600}svg.chart text.v.in{fill:var(--in)}svg.chart text.v.out{fill:var(--out)}
+.chart-wrap{width:100%;min-width:0}.chart-wrap svg{display:block}
+
+.chk{flex-direction:row;align-items:center;gap:10px;color:var(--text);font-size:15px;font-weight:500;margin:0 0 14px;cursor:pointer}
+.chk input{width:20px;height:20px;padding:0;flex:none;accent-color:var(--primary)}
+.pend{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
+.pend:first-of-type{border-top:0}
+
+/* Modal / bottom sheet */
+.ov{position:fixed;inset:0;z-index:50;background:rgba(8,12,22,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .2s}
+.ov.show{opacity:1}
+.sheet{width:100%;max-width:520px;max-height:92vh;overflow:auto;background:var(--surface);border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));transform:translateY(32px);transition:transform .25s}
+.ov.show .sheet{transform:none}
+.sh-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font-size:18px}
+@media(min-width:900px){.ov{align-items:center}.sheet{border-radius:24px;padding-bottom:20px}}
+.toast{position:fixed;left:50%;bottom:100px;transform:translate(-50%,16px);background:var(--text);color:var(--bg);padding:11px 18px;border-radius:99px;font-weight:600;z-index:99;opacity:0;transition:.3s;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}.toast.err{background:var(--danger);color:#fff}
+
+/* Tela de PIN */
+.lock{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:24px;background:linear-gradient(160deg,var(--primary),color-mix(in srgb,var(--primary) 55%,#000))}
+.lock-card{width:100%;max-width:340px;display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:center;padding:28px 22px;background:var(--surface);border-radius:calc(var(--radius) + 8px);box-shadow:var(--shadow)}
+.lock-card .logo{width:72px;height:72px;border-radius:22px;font-size:30px;margin:0 auto}
+.lock-card h1{font-size:22px}.lock-card label{margin:0;justify-content:center}
+.lock-card input[type=password]{text-align:center;letter-spacing:.2em;font-size:20px}
+.lock-err{color:var(--danger);font-size:13.5px;font-weight:600}
+
+/* Ajustes */
+.swatches{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.preset{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:99px;background:var(--surface);cursor:pointer;font-weight:600;font-size:13px}
+.preset i{width:16px;height:16px;border-radius:50%;display:block}.preset i+i{margin-left:-12px;border:2px solid var(--surface)}
+.logo-edit{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.logo-edit .logo{width:56px;height:56px;border-radius:16px;font-size:22px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
 </head>
 <body>
-  <iframe id="app" title="DoSim · Fluxo de Caixa" referrerpolicy="no-referrer" allow="clipboard-write"></iframe>
-  <div class="sa" id="sa-top"></div><div class="sa" id="sa-bottom"></div>
-
-  <div id="splash" role="status" aria-live="polite">
-    <img src="icons/icon-512.png" alt="DoSim" width="132" height="132">
-    <div class="spin" id="spin"></div>
-    <div id="help">
-      <p id="help-msg"></p>
-      <a id="open-direct" href="#" target="_top" rel="noopener">Abrir direto no navegador</a>
-      <button id="retry" type="button">Tentar novamente</button>
-    </div>
-  </div>
-
+  <div id="app" class="app"><div class="load" style="margin:auto">Carregando…</div></div>
   <script src="config.js"></script>
   <script>
-  (function () {
-    'use strict';
-    var cfg = window.APP_CONFIG || {};
-    var frame = document.getElementById('app'), splash = document.getElementById('splash');
-    var help = document.getElementById('help'), helpMsg = document.getElementById('help-msg'), spin = document.getElementById('spin');
-    var root = document.documentElement, metaTheme = document.querySelector('meta[name="theme-color"]');
-    var HEX = /^#[0-9a-fA-F]{6}$/, KEY = 'cx-pwa-theme', timer;
+/* ===== Utilitários ===== */
+const $ = (s, e) => (e || document).querySelector(s), $$ = (s, e) => [...(e || document).querySelectorAll(s)];
+const h = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const pad = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const fmtDate = d => String(d).split('-').reverse().slice(0, 2).join('/');
+/* Máscara bancária: digita-se só números e eles entram da direita para a esquerda (1000 -> R$ 10,00) */
+const maskMoney = v => {
+  const d = String(v).replace(/\D/g, '').replace(/^0+/, '').slice(0, 12);
+  if (!d) return '';
+  const p = d.padStart(3, '0');
+  return 'R$ ' + p.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + p.slice(-2);
+};
+const moneyFmt = n => n === '' || n == null ? '' : maskMoney(String(Math.round(Number(n) * 100)));
+const parseMoney = v => { const d = String(v).replace(/\D/g, ''); return d ? Number(d) / 100 : ''; };
+document.addEventListener('input', e => { if (e.target.matches && e.target.matches('[data-money]')) e.target.value = maskMoney(e.target.value); });
+document.addEventListener('focusin', e => { const t = e.target; if (t.matches && t.matches('[data-money]')) setTimeout(() => t.setSelectionRange(t.value.length, t.value.length), 0); });
 
-    function paint(t) {                                   // cores da marca: status bar, splash e faixa inferior
-      if (t && HEX.test(t.primary)) { root.style.setProperty('--brand', t.primary); root.style.setProperty('--sat', t.primary); metaTheme.setAttribute('content', t.primary); }
-      if (t && HEX.test(t.surface)) root.style.setProperty('--sab', t.surface);
+const ICONS = {
+  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  list:'<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  tag:'<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+  settings:'<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  up:'<line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+  down:'<line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  box:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+  dots:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+};
+const ico = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
+
+/* ===== API e estado ===== */
+const API = {
+  call(route, p, pin) {
+    const usePin = pin === undefined ? Store.pin : pin;
+    if (typeof google !== 'undefined' && google.script && google.script.run)         // rodando dentro do Apps Script
+      return new Promise((ok, no) => google.script.run.withSuccessHandler(ok)
+        .withFailureHandler(e => no(new Error(e.message || String(e)))).api(route, p || {}, usePin));
+    return API.http(route, p || {}, usePin);                                         // PWA (GitHub Pages)
+  },
+  /** POST "simples" (text/plain, sem cabeçalhos extras, sem cookies): não dispara preflight CORS
+   *  e não depende de conta Google logada, de iframe nem de cookies de terceiros. */
+  async http(route, payload, pin) {
+    const url = (window.APP_CONFIG || {}).APP_URL;
+    if (!url) throw new Error('Link do app não configurado (arquivo config.js).');
+    let res;
+    try {
+      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ route, payload, pin }), redirect: 'follow', credentials: 'omit' });
+    } catch (e) { throw new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.'); }
+    let json;
+    try { json = await res.json(); }
+    catch (e) { throw new Error('Resposta inválida do servidor. Confirme se o app foi publicado com acesso "Qualquer pessoa".'); }
+    if (!json.ok) throw new Error(json.error || 'Erro no servidor.');
+    return json.data;
+  }
+};
+const Store = { config: {}, categorias: [], catalogo: [], contatos: [], pin: '', mes: today().slice(0, 7) };
+const FORMAS = [['pix', 'Pix', 'Pix'], ['dinheiro', 'Dinheiro (espécie)', 'Dinheiro'], ['credito', 'Cartão de crédito', 'Crédito'],
+                ['debito', 'Cartão de débito', 'Débito'], ['transferencia', 'Transferência bancária', 'Transferência']];
+const formaCurta = v => (FORMAS.find(f => f[0] === v) || [])[2] || '';
+const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+const catOf = id => Store.categorias.find(c => c.id === id) || { nome: 'Sem categoria', cor: '#94A3B8' };
+
+/* ===== UI helpers ===== */
+const UI = {
+  toast(msg, err) {
+    const t = h(`<div class="toast ${err ? 'err' : ''}">${esc(msg)}</div>`);
+    document.body.append(t); setTimeout(() => t.classList.add('show'), 10);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3200);
+  },
+  modal(title, body, mount, onDismiss) {
+    const m = h(`<div class="ov"><div class="sheet"><div class="sh-head"><b>${esc(title)}</b><button class="ib" data-x aria-label="Fechar">${ico('x')}</button></div><div class="sh-body"></div></div></div>`);
+    const close = byUser => { m.classList.remove('show'); setTimeout(() => m.remove(), 200); if (byUser === true && onDismiss) onDismiss(); };
+    const box = $('.sh-body', m); box.innerHTML = body;
+    m.onclick = e => { if (e.target === m || e.target.closest('[data-x]')) close(true); };
+    document.body.append(m); requestAnimationFrame(() => m.classList.add('show'));
+    if (mount) mount(box, close); return close;
+  },
+  /** Resolve true (confirmou), false (recusou) ou null (fechou sem escolher). */
+  confirm(msg, o) {
+    o = Object.assign({ title: 'Confirmar exclusão', yes: 'Excluir', no: 'Cancelar', danger: true }, o || {});
+    return new Promise(res => UI.modal(o.title,
+      `<p class="muted" style="margin-bottom:18px">${esc(msg)}</p><div class="row end"><button class="btn" data-n>${esc(o.no)}</button><button class="btn ${o.danger ? 'danger' : 'primary'}" data-y>${esc(o.yes)}</button></div>`,
+      (box, close) => { box.onclick = e => {
+        if (e.target.closest('[data-y]')) { res(true); close(); }
+        if (e.target.closest('[data-n]')) { res(false); close(); } }; },
+      () => res(null)));
+  },
+  async busy(btn, fn) { btn.disabled = true; try { return await fn(); } catch (e) { UI.toast(e.message, true); } finally { btn.disabled = false; } }
+};
+
+/** Botões segmentados: <div class="seg" data-f="campo"><button data-v="valor">…</button></div> */
+function bindSeg(root, s, cb) {
+  const paint = () => $$('.seg[data-f]', root).forEach(g => $$('button', g).forEach(b => b.classList.toggle('on', String(s[g.dataset.f]) === b.dataset.v)));
+  root.addEventListener('click', e => {
+    const b = e.target.closest('.seg[data-f] button'); if (!b) return;
+    const f = b.parentNode.dataset.f, v = b.dataset.v;
+    s[f] = v === 'true' ? true : v === 'false' ? false : v; paint(); if (cb) cb(f);
+  });
+  paint(); return paint;
+}
+
+/** Seletor de mês compartilhado entre os módulos. */
+function monthBar(onChange) {
+  const [y, m] = Store.mes.split('-').map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const el = h(`<div class="mbar"><button class="ib" data-d="-1" aria-label="Mês anterior">‹</button><span>${label}</span><button class="ib" data-d="1" aria-label="Próximo mês">›</button></div>`);
+  el.onclick = e => {
+    const b = e.target.closest('[data-d]'); if (!b) return;
+    const d = new Date(y, m - 1 + Number(b.dataset.d), 1);
+    Store.mes = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; onChange();
+  };
+  return el;
+}
+
+/* ===== Tema (aplica as configurações de UI) ===== */
+const Theme = {
+  apply(c) {
+    const r = document.documentElement.style;
+    r.setProperty('--primary', c.primary); r.setProperty('--accent', c.accent);
+    r.setProperty('--danger', c.danger); r.setProperty('--radius', c.radius + 'px');
+    const dark = c.tema === 'dark' || (c.tema === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    $$('.logo').forEach(l => l.innerHTML = c.logo ? `<img src="${esc(c.logo)}" alt="">` : esc((c.empresa || '?')[0].toUpperCase()));
+    $$('.brand-name').forEach(n => n.textContent = c.empresa);
+    document.title = c.empresa + ' · Fluxo de caixa';
+    Theme.setBarColor(c.primary);
+  },
+  /** PWA instalada: a barra de status do Android acompanha a cor da marca definida em Ajustes. */
+  setBarColor(color) {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && /^#[0-9a-fA-F]{6}$/.test(color || '')) meta.setAttribute('content', color);
+  }
+};
+
+/* ===== App: registro de módulos + navegação ===== */
+const App = {
+  mods: [],
+  groups: { cadastros: { label: 'Cadastros', icon: 'grid' } }, // no celular, módulos do mesmo grupo dividem uma aba
+  /** register({ id, label, icon, order, group?, render(containerEl) }) */
+  register(m) { this.mods.push(m); this.mods.sort((a, b) => (a.order || 50) - (b.order || 50)); },
+  shell() {
+    const btn = m => `<button class="nav" data-id="${m.id}">${ico(m.icon)}<span>${esc(m.label)}</span></button>`;
+    const items = this.mods.map(btn).join(''), seen = {};
+    const tabs = this.mods.map(m => {
+      if (!m.group) return btn(m);
+      if (seen[m.group]) return ''; seen[m.group] = 1;
+      const g = this.groups[m.group];
+      return `<button class="nav" data-id="${m.id}" data-group="${m.group}">${ico(g.icon)}<span>${esc(g.label)}</span></button>`;
+    }).join('');
+    $('#app').innerHTML = `
+      <aside class="side"><div class="brand"><div class="logo"></div><span class="brand-name"></span></div>
+        <div class="grow-nav">${items}</div><button class="btn primary" data-new>${ico('plus')} Novo lançamento</button></aside>
+      <header class="top"><div class="brand"><div class="logo"></div><span class="brand-name"></span></div></header>
+      <main id="view"></main><nav class="tabbar">${tabs}</nav>
+      <button class="fab" data-new aria-label="Novo lançamento">${ico('plus')}</button>`;
+    $('#app').onclick = e => {
+      const n = e.target.closest('.nav'), g = e.target.closest('[data-go]');
+      if (n) this.go(n.dataset.id); if (g) this.go(g.dataset.go);
+      if (e.target.closest('[data-new]')) Lanc.form();
+    };
+  },
+  /** Módulo com alterações pendentes define App.leaveGuard (async, true = pode sair). */
+  leaveGuard: null,
+  async go(id) {
+    if (this.leaveGuard) {
+      const ok = await this.leaveGuard(); if (!ok) return;
+      this.leaveGuard = null; window.onbeforeunload = null;
     }
-    try { paint(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { /* primeira abertura */ }
+    this.cur = this.mods.find(m => m.id === id);
+    Theme.apply(Store.config); // descarta prévias de tema não salvas
+    $$('.nav').forEach(n => n.classList.toggle('on', n.dataset.id === id || (!!n.dataset.group && n.dataset.group === this.cur.group)));
+    const old = $('#view'), v = old.cloneNode(false); old.replaceWith(v); // elemento novo = sem listeners antigos
+    v.classList.add('busy'); scrollTo(0, 0);
+    if (this.cur.group) v.append(h(`<div class="seg subnav">${this.mods.filter(m => m.group === this.cur.group).map(m =>
+      `<button data-go="${m.id}" class="${m.id === id ? 'on' : ''}">${esc(m.label)}</button>`).join('')}</div>`));
+    try { await this.cur.render(v); }
+    catch (e) { v.append(h(`<div class="empty">Não foi possível carregar. ${esc(e.message)}</div>`)); }
+    v.classList.remove('busy');
+  },
+  refresh() { return this.cur && this.cur.refreshable === false ? Promise.resolve() : this.go(this.cur.id); }, // refreshable:false = não recarrega (evita perder edições)
+  async start() {
+    try { await Auth.ensure(); const b = await API.call('core.bootstrap'); Store.config = b.config; Store.categorias = b.categorias; Store.catalogo = b.catalogo; Store.contatos = b.contatos; }
+    catch (e) { $('#app').innerHTML = `<div class="empty" style="margin:auto">Erro ao iniciar: ${esc(e.message)}</div>`; return; }
+    this.shell(); Theme.apply(Store.config); this.go(this.mods[0].id);
+  }
+};
+</script>
+<script>
+/** Tela de PIN (só aparece se o servidor tiver APP_PIN). */
+const Auth = {
+  KEY: 'cx-pin',
+  saved() { try { return localStorage.getItem(this.KEY) || ''; } catch (e) { return ''; } },
+  save(pin) { try { if (pin) localStorage.setItem(this.KEY, pin); else localStorage.removeItem(this.KEY); } catch (e) { /* sem armazenamento: pede o PIN a cada abertura */ } },
 
-    window.addEventListener('message', function (ev) {    // mensagem enviada pelo app (Theme.notifyShell)
-      if (!/^https:\/\/([a-z0-9-]+\.)*(googleusercontent\.com|google\.com)$/.test(ev.origin)) return;
-      var m = ev.data; if (!m || m.type !== 'cx-theme') return;
-      var t = { primary: m.primary, surface: m.surface }; paint(t);
-      try { localStorage.setItem(KEY, JSON.stringify(t)); } catch (e) { /* sem armazenamento */ }
+  async ensure() {
+    const st = await API.call('auth.status', {}, '');
+    if (!st.required) return;
+    const guardado = this.saved();
+    if (guardado) {
+      try { await API.call('auth.check', {}, guardado); Store.pin = guardado; return; }
+      catch (e) { this.save(''); }
+    }
+    await this.prompt(st.brand || {});
+  },
+
+  prompt(brand) {
+    return new Promise(resolve => {
+      if (/^#[0-9a-f]{6}$/i.test(brand.primary || '')) document.documentElement.style.setProperty('--primary', brand.primary);
+      const logo = brand.logo ? `<img src="${esc(brand.logo)}" alt="">` : esc(((brand.empresa || '?')[0] || '?').toUpperCase());
+      const box = h(`<div class="lock"><div class="lock-card">
+        <div class="logo">${logo}</div><h1>${esc(brand.empresa || 'Fluxo de caixa')}</h1>
+        <p class="muted">Digite o PIN para entrar</p>
+        <input id="lk-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN" aria-label="PIN">
+        <label class="chk"><input type="checkbox" id="lk-keep" checked> Manter neste aparelho</label>
+        <p class="lock-err" id="lk-err" role="alert" hidden></p>
+        <button class="btn primary" id="lk-go">Entrar</button></div></div>`);
+      document.body.append(box);
+      const pinEl = $('#lk-pin', box), err = $('#lk-err', box), go = $('#lk-go', box);
+      const enter = async () => {
+        const pin = pinEl.value; if (!pin) return;
+        go.disabled = true; err.hidden = true;
+        try {
+          await API.call('auth.check', {}, pin);
+          Store.pin = pin; this.save($('#lk-keep', box).checked ? pin : '');
+          box.remove(); resolve();
+        } catch (e) { err.textContent = e.message; err.hidden = false; pinEl.value = ''; pinEl.focus(); }
+        finally { go.disabled = false; }
+      };
+      go.onclick = enter; pinEl.onkeydown = e => { if (e.key === 'Enter') enter(); };
+      pinEl.focus();
+    });
+  }
+};
+</script>
+<script>
+const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+/** Gráfico de colunas (entradas x saídas) na largura real W: cabe no celular, sem rolagem horizontal.
+ *  Valor em reais no topo de cada coluna, na diagonal. Celular (<460px): sem centavos. */
+function barChartSvg(serie, W) {
+  const max = Math.max(1, ...serie.flatMap(s => [s.entradas, s.saidas]));
+  const narrow = W < 460, fs = W < 300 ? 9 : narrow ? 10 : 11;
+  const fmt = narrow ? n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }) : brl;
+  // Folga calculada pelo maior rótulo (diagonal a 45°): cabe de R$ 9,99 a milhões, sem cortar no topo nem na direita
+  const maior = Math.max(...serie.flatMap(s => [fmt(s.entradas), fmt(s.saidas)]).map(t => t.length));
+  const proj = Math.ceil(maior * fs * 0.62 * Math.SQRT1_2);
+  const padL = 4, padR = Math.max(narrow ? 42 : 58, proj + 4), top = Math.max(narrow ? 56 : 64, proj + 12), ALT = 120, base = top + ALT, H = base + 26;
+  const gw = (W - padL - padR) / serie.length, bw = Math.min(26, gw * 0.3), gap = Math.max(3, gw * 0.06);
+  const col = (x, val, cls) => {
+    if (!val) return '';
+    const hh = Math.max(2, val / max * ALT), y = base - hh;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 3)}" fill="var(--${cls})"/>
+      <text class="v ${cls}" style="font-size:${fs}px" transform="translate(${x + bw / 2} ${y - 5}) rotate(-45)">${fmt(val)}</text>`;
+  };
+  return `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Entradas e saídas dos últimos 6 meses"><line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--border)"/>` +
+    serie.map((s, i) => {
+      const x = padL + i * gw + (gw - (2 * bw + gap)) / 2;
+      return col(x, s.entradas, 'in') + col(x + bw + gap, s.saidas, 'out') +
+        `<text x="${x + bw + gap / 2}" y="${base + 17}" text-anchor="middle" style="font-size:${fs}px">${MESES[+s.mes.slice(5) - 1]}</text>`;
+    }).join('') + '</svg>';
+}
+
+App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Painel</h1><small>Resumo do fluxo de caixa</small></div></div>`));
+    v.append(monthBar(() => App.refresh()));
+    const d = await API.call('dashboard.summary', { mes: Store.mes });
+    const draw = wrap => { const W = Math.floor(wrap.clientWidth); if (W >= 120) wrap.innerHTML = barChartSvg(d.serie, W); };
+    const maxCat = Math.max(1, ...d.porCategoria.map(c => c.total));
+    const cats = d.porCategoria.length ? d.porCategoria.map(c =>
+      `<div class="cat-row"><span class="nm">${esc(c.nome)}</span><span>${brl(c.total)}</span></div>
+       <div class="bar" style="--c:${esc(c.cor)}"><i style="width:${c.total / maxCat * 100}%"></i></div>`).join('')
+      : '<div class="empty">Sem saídas realizadas neste mês.</div>';
+    const pend = d.porContato.length ? `<div class="card" style="margin-top:12px"><h3>Pendências por contato</h3>${d.porContato.map(c => {
+      const net = c.aReceber - c.aPagar;
+      return `<div class="pend"><span class="grow"><b>${esc(c.nome)}</b><br><small>${c.aReceber ? 'A receber ' + brl(c.aReceber) : ''}${c.aReceber && c.aPagar ? ' · ' : ''}${c.aPagar ? 'A pagar ' + brl(c.aPagar) : ''}</small></span>
+        <b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}${brl(Math.abs(net))}</b></div>`; }).join('')}
+      <small>Considera todos os meses. Positivo: o contato deve a você. Negativo: você deve a ele.</small></div>` : '';
+    v.append(h(`<div>
+      <div class="kpis">
+        <div class="card kpi hero"><span>Saldo do mês</span><b>${brl(d.saldo)}</b></div>
+        <div class="card kpi"><span class="pos">${ico('up')} Entradas</span><b>${brl(d.entradas)}</b></div>
+        <div class="card kpi"><span class="neg">${ico('down')} Saídas</span><b>${brl(d.saidas)}</b></div>
+        <div class="card kpi wide"><span>${ico('clock')} Pendentes</span>
+          <small>A receber <b class="pos" style="font-size:15px">${brl(d.aReceber)}</b></small>
+          <small>A pagar <b class="neg" style="font-size:15px">${brl(d.aPagar)}</b></small></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h3>Últimos 6 meses</h3>
+          <div class="chart-wrap"></div>
+          <div class="row" style="gap:16px;margin-top:6px"><small><b class="pos">●</b> Entradas</small><small><b class="neg">●</b> Saídas</small></div></div>
+        <div class="card"><h3>Maiores saídas</h3>${cats}</div>
+      </div>${pend}</div>`));
+    const w = $('.chart-wrap', v); draw(w);
+    if (window.ResizeObserver) new ResizeObserver(() => draw(w)).observe(w);
+  }
+});
+</script>
+<script>
+const Lanc = {
+  tipo: '',
+  form(item) {
+    const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '' }, item || {});
+    const original = s.descricao, originalContato = s.contato_nome, OUTRO = '__outro';
+    const regra = Store.config.contato_regra || 'opcional';
+    const papel = () => s.tipo === 'entrada' ? 'cliente' : 'fornecedor';
+    const exigido = () => regra === 'sempre' || (regra === 'pendente' && s.status === 'pendente');
+    const itens = () => Store.catalogo.filter(i => i.tipo === s.tipo && (i.ativo || i.id === s.item_id));
+    const contatos = () => Store.contatos.filter(c => c[papel()] && (c.ativo || c.id === s.contato_id));
+    // Ao editar: reencontra item e contato (por id ou, em registros antigos, pelo nome)
+    if (s.id && !itens().some(i => i.id === s.item_id)) { const m = itens().find(i => norm(i.nome) === norm(s.descricao)); s.item_id = m ? m.id : ''; }
+    if (s.id && !Store.contatos.some(c => c.id === s.contato_id)) { const m = Store.contatos.find(c => norm(c.nome) === norm(s.contato_nome)); s.contato_id = m ? m.id : ''; }
+    let sel = s.item_id || (s.descricao ? OUTRO : (itens().length ? '' : OUTRO)), csel = s.contato_id || (s.contato_nome ? OUTRO : ''), lastAuto = '';
+
+    const formaOpts = FORMAS.map(f => `<option value="${f[0]}">${f[1]}</option>`).join('') + (s.id && !s.forma ? '<option value="">Não informado</option>' : '');
+    const body = `
+      <div class="seg" data-f="tipo"><button data-v="entrada">Entrada</button><button data-v="saida">Saída</button></div>
+      <label>Valor<input id="f-valor" inputmode="numeric" data-money placeholder="R$ 0,00" autocomplete="off"></label>
+      <label><span id="f-item-l"></span><select id="f-item"></select></label>
+      <label id="f-man-w" hidden><span id="f-desc-l">Descrição</span><input id="f-desc" maxlength="200" autocomplete="off"></label>
+      <label><span id="f-cont-l"></span><select id="f-cont"></select></label>
+      <label id="f-cman-w" hidden><span id="f-cnome-l"></span><input id="f-cnome" maxlength="80" autocomplete="off"></label>
+      <div class="two"><label>Data<input id="f-data" type="date"></label><label>Categoria<select id="f-cat"></select></label></div>
+      <label><span id="f-forma-l"></span><select id="f-forma">${formaOpts}</select></label>
+      <div class="seg" data-f="status"><button data-v="pago">Realizado</button><button data-v="pendente">Pendente</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar lançamento</button></div>`;
+
+    UI.modal(s.id ? 'Editar lançamento' : 'Novo lançamento', body, (box, close) => {
+      const el = id => $('#' + id, box), ent = () => s.tipo === 'entrada';
+      el('f-valor').value = moneyFmt(s.valor); el('f-data').value = s.data; el('f-desc').value = s.descricao; el('f-cnome').value = s.contato_nome; el('f-forma').value = s.forma;
+
+      const fillCats = () => {
+        const opts = Store.categorias.filter(c => c.tipo === s.tipo && (c.ativo || c.id === s.categoria_id));
+        if (!opts.some(c => c.id === s.categoria_id)) s.categoria_id = opts[0] ? opts[0].id : '';
+        el('f-cat').innerHTML = opts.length ? opts.map(c => `<option value="${c.id}" ${c.id === s.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')
+          : '<option value="">Cadastre uma categoria</option>';
+      };
+      const fillItens = () => {
+        el('f-item').innerHTML = '<option value="">Selecione…</option>' + itens().map(i => `<option value="${i.id}">${esc(i.nome)}</option>`).join('')
+          + `<option value="${OUTRO}">Outro (digitar manualmente)</option>`;
+        el('f-item').value = sel; el('f-man-w').hidden = sel !== OUTRO;
+      };
+      const fillContatos = () => {
+        el('f-cont').innerHTML = `<option value="">${exigido() ? 'Selecione…' : 'Não informar'}</option>` + contatos().map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')
+          + `<option value="${OUTRO}">Outro (digitar manualmente)</option>`;
+        el('f-cont').value = csel; el('f-cman-w').hidden = csel !== OUTRO;
+      };
+      const labels = () => {
+        el('f-item-l').textContent = ent() ? 'Produto ou serviço' : 'Despesa';
+        el('f-desc-l').textContent = ent() ? 'Descrição do produto ou serviço' : 'Descrição da despesa';
+        el('f-desc').placeholder = ent() ? 'Ex.: Corte e escova' : 'Ex.: Gasolina';
+        el('f-cont-l').textContent = (ent() ? 'Cliente' : 'Fornecedor') + (exigido() ? '' : ' (opcional)');
+        el('f-cnome-l').textContent = 'Nome do ' + papel();
+        el('f-forma-l').textContent = ent() ? 'Forma de recebimento' : 'Forma de pagamento';
+      };
+
+      bindSeg(box, s, f => {
+        if (f === 'tipo') {
+          s.item_id = ''; el('f-desc').value = ''; sel = itens().length ? '' : OUTRO; lastAuto = '';
+          s.contato_id = ''; csel = ''; el('f-cnome').value = '';
+          fillItens(); fillCats();
+        }
+        labels(); fillContatos(); // o status "pendente" pode tornar o contato obrigatório
+      });
+      labels(); fillItens(); fillCats(); fillContatos();
+
+      el('f-item').onchange = () => {
+        sel = el('f-item').value; el('f-man-w').hidden = sel !== OUTRO;
+        if (sel === OUTRO) { s.item_id = ''; el('f-desc').focus(); return; }
+        const it = Store.catalogo.find(i => i.id === sel); s.item_id = sel;
+        if (!it) return;
+        if (it.categoria_id && Store.categorias.some(c => c.id === it.categoria_id && c.tipo === s.tipo && c.ativo)) { s.categoria_id = it.categoria_id; fillCats(); }
+        const v = el('f-valor');
+        if (it.preco !== '' && (v.value === '' || v.value === lastAuto)) { lastAuto = moneyFmt(it.preco); v.value = lastAuto; }
+      };
+      el('f-cont').onchange = () => {
+        csel = el('f-cont').value; el('f-cman-w').hidden = csel !== OUTRO;
+        s.contato_id = csel && csel !== OUTRO ? csel : '';
+        if (csel === OUTRO) el('f-cnome').focus();
+      };
+
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          // --- item / descrição ---
+          let descricao = '', item_id = '', salvar = false;
+          if (sel === OUTRO) {
+            descricao = el('f-desc').value.trim();
+            const igual = Store.catalogo.find(i => i.tipo === s.tipo && norm(i.nome) === norm(descricao));
+            if (igual) item_id = igual.id; // já existe no catálogo: apenas vincula
+            else if (descricao && (!s.id || descricao !== original)) {
+              const r = await UI.confirm(`Deseja salvar “${descricao}” no catálogo para agilizar os próximos lançamentos?`,
+                { title: 'Adicionar ao catálogo?', yes: 'Salvar no catálogo', no: 'Só neste lançamento', danger: false });
+              if (r === null) return; // fechou o aviso: volta ao formulário
+              salvar = r;
+            }
+          } else if (sel) {
+            const it = Store.catalogo.find(i => i.id === sel); descricao = it.nome; item_id = sel;
+          } else if (!(s.id && !original)) throw new Error('Selecione um item da lista ou escolha “Outro” para digitar.');
+
+          // --- cliente / fornecedor ---
+          const pp = papel(); let contato_id = '', contato_nome = '', salvarC = false;
+          if (csel === OUTRO) {
+            contato_nome = el('f-cnome').value.trim();
+            if (contato_nome) {
+              const ex = Store.contatos.find(c => norm(c.nome) === norm(contato_nome));
+              if (ex) {
+                contato_id = ex.id; contato_nome = ex.nome;
+                if (!ex[pp]) { // existe, mas só no outro papel
+                  const r = await UI.confirm(`“${ex.nome}” já está nos contatos como ${pp === 'cliente' ? 'fornecedor' : 'cliente'}. Deseja marcar também como ${pp}?`,
+                    { title: 'Atualizar contato?', yes: 'Marcar como ' + pp, no: 'Só neste lançamento', danger: false });
+                  if (r === null) return; salvarC = r;
+                }
+              } else if (!s.id || contato_nome !== originalContato) {
+                const r = await UI.confirm(`Deseja salvar “${contato_nome}” nos contatos como ${pp}?`,
+                  { title: 'Adicionar aos contatos?', yes: 'Salvar nos contatos', no: 'Só neste lançamento', danger: false });
+                if (r === null) return; salvarC = r;
+              }
+            }
+          } else if (csel) {
+            const c = Store.contatos.find(x => x.id === csel); contato_id = csel; contato_nome = c ? c.nome : '';
+          }
+          if (exigido() && !contato_nome) throw new Error(`Informe o ${pp} (regra definida em Ajustes).`);
+
+          await API.call('lancamentos.save', { id: s.id, tipo: s.tipo, status: s.status, valor: parseMoney(el('f-valor').value),
+            descricao, item_id, salvar_catalogo: salvar, contato_id, contato_nome, salvar_contato: salvarC,
+            data: el('f-data').value, categoria_id: el('f-cat').value, forma: el('f-forma').value });
+          if (salvar) Store.catalogo = await API.call('catalogo.list');
+          if (salvarC) Store.contatos = await API.call('contatos.list');
+          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); App.refresh();
+        });
+        if (del && await UI.confirm('Excluir este lançamento?')) UI.busy(del, async () => {
+          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); App.refresh();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Lançamentos</h1><small>Entradas e saídas do período</small></div></div>`));
+    v.append(monthBar(() => App.refresh()));
+    v.append(h(`<div class="seg" data-f="tipo"><button data-v="">Todos</button><button data-v="entrada">Entradas</button><button data-v="saida">Saídas</button></div>`));
+    bindSeg(v, Lanc, () => App.refresh());
+    const rows = await API.call('lancamentos.list', { mes: Store.mes, tipo: Lanc.tipo });
+    const list = h('<div class="list"></div>');
+    list.innerHTML = rows.length ? rows.map(l => { const c = catOf(l.categoria_id), e = l.tipo === 'entrada'; return `
+      <button class="item" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
+        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${esc(c.nome)} · ${fmtDate(l.data)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''} ${l.status === 'pendente' ? '<i class="chip warn">Pendente</i>' : ''}</small></span>
+        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b></button>`; }).join('')
+      : '<div class="empty">Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.</div>';
+    list.onclick = ev => { const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id)); };
+    v.append(list);
+  }
+});
+</script>
+<script>
+/** Catálogo: produtos/serviços (entradas) e despesas recorrentes (saídas). */
+const Catalogo = {
+  filtro: 'entrada', q: '',
+  async reload() { Store.catalogo = await API.call('catalogo.list'); },
+  form(item) {
+    const s = Object.assign({ tipo: Catalogo.filtro, nome: '', categoria_id: '', preco: '', ativo: true }, item || {});
+    const body = `
+      <div class="seg" data-f="tipo"><button data-v="entrada">Produto ou serviço</button><button data-v="saida">Despesa</button></div>
+      <label>Nome<input id="k-nome" maxlength="80" autocomplete="off"></label>
+      <label>Categoria padrão<select id="k-cat"></select></label>
+      <label>Valor padrão (opcional)<input id="k-preco" inputmode="numeric" data-money placeholder="R$ 0,00"></label>
+      <div class="seg" data-f="ativo"><button data-v="true">Ativo</button><button data-v="false">Inativo</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar item</button></div>`;
+    UI.modal(s.id ? 'Editar item' : 'Novo item', body, (box, close) => {
+      const el = id => $('#' + id, box);
+      el('k-nome').value = s.nome; el('k-preco').value = moneyFmt(s.preco);
+      const fill = () => {
+        const opts = Store.categorias.filter(c => c.tipo === s.tipo && (c.ativo || c.id === s.categoria_id));
+        if (!opts.some(c => c.id === s.categoria_id)) s.categoria_id = '';
+        el('k-cat').innerHTML = '<option value="">Sem categoria padrão</option>' + opts.map(c => `<option value="${c.id}" ${c.id === s.categoria_id ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+        el('k-nome').placeholder = s.tipo === 'entrada' ? 'Ex.: Corte e escova' : 'Ex.: Gasolina';
+      };
+      bindSeg(box, s, f => { if (f === 'tipo') fill(); }); fill();
+      const done = msg => async () => { close(); UI.toast(msg); await Catalogo.reload(); App.refresh(); };
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          await API.call('catalogo.save', { id: s.id, tipo: s.tipo, ativo: s.ativo, nome: el('k-nome').value,
+            categoria_id: el('k-cat').value, preco: parseMoney(el('k-preco').value) });
+          await done('Item salvo')();
+        });
+        if (del && await UI.confirm('Excluir este item? Os lançamentos já feitos continuam com a descrição.')) UI.busy(del, async () => {
+          await API.call('catalogo.remove', { id: s.id }); await done('Item excluído')();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'catalogo', group: 'cadastros', label: 'Catálogo', icon: 'box', order: 25,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Catálogo</h1><small>Produtos, serviços e despesas para lançar mais rápido</small></div><button class="btn primary" data-add>${ico('plus')} Novo item</button></div>`));
+    v.append(h(`<div class="seg" data-f="filtro"><button data-v="entrada">Produtos e serviços</button><button data-v="saida">Despesas</button></div>`));
+    v.append(h(`<label><input id="k-busca" type="search" placeholder="Buscar no catálogo" autocomplete="off" aria-label="Buscar no catálogo"></label>`));
+    const list = h('<div class="list"></div>'); v.append(list);
+    await Catalogo.reload();
+    const paint = () => {
+      const rows = Store.catalogo.filter(i => i.tipo === Catalogo.filtro && norm(i.nome).includes(norm(Catalogo.q)));
+      list.innerHTML = rows.length ? rows.map(i => { const c = catOf(i.categoria_id);
+        return `<button class="item" data-id="${i.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico('box')}</span>
+          <span class="grow"><b>${esc(i.nome)}</b><small>${i.categoria_id ? esc(c.nome) : 'Sem categoria padrão'}</small></span>
+          ${i.ativo ? '' : '<i class="chip">Inativo</i>'}${i.preco !== '' ? `<b>${brl(i.preco)}</b>` : ''}</button>`; }).join('')
+        : `<div class="empty">${Catalogo.q ? 'Nenhum item encontrado.' : 'Nenhum item cadastrado.<br>Cadastre aqui ou salve ao lançar algo digitado manualmente.'}</div>`;
+    };
+    bindSeg(v, Catalogo, paint); paint();
+    $('#k-busca', v).value = Catalogo.q;
+    v.addEventListener('input', e => { if (e.target.id === 'k-busca') { Catalogo.q = e.target.value; paint(); } });
+    v.addEventListener('click', e => {
+      if (e.target.closest('[data-add]')) Catalogo.form();
+      const b = e.target.closest('.item'); if (b) Catalogo.form(Store.catalogo.find(i => i.id === b.dataset.id));
+    });
+  }
+});
+</script>
+<script>
+/** Contatos: cadastro único de clientes e fornecedores (a mesma pessoa pode ser os dois). */
+const Contatos = {
+  filtro: '', q: '',
+  async reload() { Store.contatos = await API.call('contatos.list'); },
+  form(item) {
+    const s = Object.assign({ nome: '', telefone: '', obs: '', cliente: Contatos.filtro !== 'fornecedor', fornecedor: Contatos.filtro === 'fornecedor', ativo: true }, item || {});
+    const body = `
+      <label>Nome<input id="t-nome" maxlength="80" autocomplete="off"></label>
+      <label>Telefone ou WhatsApp (opcional)<input id="t-tel" type="tel" inputmode="tel" maxlength="30" autocomplete="off"></label>
+      <label>Observação (opcional)<input id="t-obs" maxlength="200" autocomplete="off"></label>
+      <div class="two"><label class="chk"><input type="checkbox" id="t-cli"> Cliente</label><label class="chk"><input type="checkbox" id="t-for"> Fornecedor</label></div>
+      <div class="seg" data-f="ativo"><button data-v="true">Ativo</button><button data-v="false">Inativo</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar contato</button></div>`;
+    UI.modal(s.id ? 'Editar contato' : 'Novo contato', body, (box, close) => {
+      const el = id => $('#' + id, box);
+      el('t-nome').value = s.nome; el('t-tel').value = s.telefone; el('t-obs').value = s.obs;
+      el('t-cli').checked = !!s.cliente; el('t-for').checked = !!s.fornecedor; bindSeg(box, s);
+      const done = msg => async () => { close(); UI.toast(msg); await Contatos.reload(); App.refresh(); };
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          await API.call('contatos.save', { id: s.id, ativo: s.ativo, nome: el('t-nome').value, telefone: el('t-tel').value,
+            obs: el('t-obs').value, cliente: el('t-cli').checked, fornecedor: el('t-for').checked });
+          await done('Contato salvo')();
+        });
+        if (del && await UI.confirm('Excluir este contato? Os lançamentos já feitos continuam com o nome.')) UI.busy(del, async () => {
+          await API.call('contatos.remove', { id: s.id }); await done('Contato excluído')();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'contatos', group: 'cadastros', label: 'Contatos', icon: 'users', order: 27,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Contatos</h1><small>Clientes e fornecedores em um só cadastro</small></div><button class="btn primary" data-add>${ico('plus')} Novo contato</button></div>`));
+    v.append(h(`<div class="seg" data-f="filtro"><button data-v="">Todos</button><button data-v="cliente">Clientes</button><button data-v="fornecedor">Fornecedores</button></div>`));
+    v.append(h(`<label><input id="t-busca" type="search" placeholder="Buscar contato" autocomplete="off" aria-label="Buscar contato"></label>`));
+    const list = h('<div class="list"></div>'); v.append(list);
+    await Contatos.reload();
+    const paint = () => {
+      const rows = Store.contatos.filter(c => (!Contatos.filtro || c[Contatos.filtro]) && norm(c.nome).includes(norm(Contatos.q)));
+      list.innerHTML = rows.length ? rows.map(c => `
+        <button class="item" data-id="${c.id}"><span class="dot" style="--c:var(--primary)">${ico('users')}</span>
+          <span class="grow"><b>${esc(c.nome)}</b><small>${esc(c.telefone || 'Sem telefone')}</small></span>
+          ${c.ativo ? '' : '<i class="chip">Inativo</i>'}${c.cliente ? '<i class="chip">Cliente</i>' : ''}${c.fornecedor ? '<i class="chip">Fornecedor</i>' : ''}</button>`).join('')
+        : `<div class="empty">${Contatos.q ? 'Nenhum contato encontrado.' : 'Nenhum contato cadastrado.<br>Cadastre aqui ou salve ao lançar um nome digitado manualmente.'}</div>`;
+    };
+    bindSeg(v, Contatos, paint); paint();
+    $('#t-busca', v).value = Contatos.q;
+    v.addEventListener('input', e => { if (e.target.id === 't-busca') { Contatos.q = e.target.value; paint(); } });
+    v.addEventListener('click', e => {
+      if (e.target.closest('[data-add]')) Contatos.form();
+      const b = e.target.closest('.item'); if (b) Contatos.form(Store.contatos.find(c => c.id === b.dataset.id));
+    });
+  }
+});
+</script>
+<script>
+const Cat = {
+  async reload() { Store.categorias = await API.call('categorias.list'); },
+  form(item) {
+    const s = Object.assign({ nome: '', tipo: 'saida', cor: '#6366F1', ativo: true }, item || {});
+    const body = `
+      <div class="seg" data-f="tipo"><button data-v="entrada">Entrada</button><button data-v="saida">Saída</button></div>
+      <label>Nome<input id="c-nome" maxlength="60" placeholder="Ex.: Manutenção"></label>
+      <label>Cor<input id="c-cor" type="color"></label>
+      <div class="seg" data-f="ativo"><button data-v="true">Ativa</button><button data-v="false">Inativa</button></div>
+      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar categoria</button></div>`;
+    UI.modal(s.id ? 'Editar categoria' : 'Nova categoria', body, (box, close) => {
+      $('#c-nome', box).value = s.nome; $('#c-cor', box).value = s.cor; bindSeg(box, s);
+      const done = msg => async () => { close(); UI.toast(msg); await Cat.reload(); App.refresh(); };
+      box.addEventListener('click', async e => {
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        if (save) UI.busy(save, async () => {
+          await API.call('categorias.save', { id: s.id, tipo: s.tipo, ativo: s.ativo, nome: $('#c-nome', box).value, cor: $('#c-cor', box).value });
+          await done('Categoria salva')();
+        });
+        if (del && await UI.confirm('Excluir esta categoria?')) UI.busy(del, async () => {
+          await API.call('categorias.remove', { id: s.id }); await done('Categoria excluída')();
+        });
+      });
+    });
+  }
+};
+
+App.register({ id: 'categorias', group: 'cadastros', label: 'Categorias', icon: 'tag', order: 30,
+  async render(v) {
+    v.append(h(`<div class="head"><div><h1>Categorias</h1><small>Tipos de entradas e saídas</small></div><button class="btn primary" data-add>${ico('plus')} Nova</button></div>`));
+    await Cat.reload();
+    const group = (tipo, titulo) => {
+      const rows = Store.categorias.filter(c => c.tipo === tipo);
+      return `<div class="sec-t">${titulo}</div><div class="list">${rows.length ? rows.map(c => `
+        <button class="item" data-id="${c.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(tipo === 'entrada' ? 'up' : 'down')}</span>
+          <span class="grow"><b>${esc(c.nome)}</b></span>${c.ativo ? '' : '<i class="chip">Inativa</i>'}</button>`).join('')
+        : '<div class="empty">Nenhuma categoria.</div>'}</div>`;
+    };
+    const box = h(`<div>${group('entrada', 'Entradas')}${group('saida', 'Saídas')}</div>`);
+    v.onclick = e => {
+      if (e.target.closest('[data-add]')) Cat.form();
+      const b = e.target.closest('.item'); if (b) Cat.form(Store.categorias.find(c => c.id === b.dataset.id));
+    };
+    v.append(box);
+  }
+});
+</script>
+<script>
+App.register({ id: 'config', label: 'Ajustes', icon: 'settings', order: 90, refreshable: false,
+  render(v) {
+    const d = Object.assign({}, Store.config);
+    let saved = JSON.stringify(d);
+    const dirty = () => JSON.stringify(d) !== saved;
+    const presets = [['Rosé', '#BD647D', '#4E9F7D', '#C8553D'], ['Índigo', '#4F46E5', '#10B981', '#EF4444'], ['Oceano', '#0284C7', '#14B8A6', '#EF4444'], ['Esmeralda', '#047857', '#F59E0B', '#DC2626'], ['Grafite', '#27272A', '#22C55E', '#EF4444']];
+    v.innerHTML = `
+      <div class="head sticky">
+        <div><h1>Ajustes <i class="chip warn" id="s-dirty" hidden>Não salvo</i></h1><small>Aparência e regras do sistema</small></div>
+        <div class="row head-actions"><button class="btn primary" data-save>Salvar</button>
+          <div class="menu-wrap"><button class="ib" data-menu aria-label="Mais opções" aria-haspopup="true" aria-expanded="false">${ico('dots')}</button>
+            <div class="menu" hidden><button data-reset>Restaurar padrão</button></div></div></div></div>
+      <div class="grid2" style="grid-template-columns:1fr">
+      <div class="card"><h3>Identidade</h3>
+        <label>Nome da empresa<input id="s-emp" maxlength="40"></label>
+        <div class="logo-edit"><div class="logo"></div><div style="flex:1">
+          <div class="row"><button class="btn" data-up>Enviar logo</button><button class="btn" data-rm>Remover</button></div>
+          <input id="s-file" type="file" accept="image/*" hidden></div></div>
+        <label>…ou endereço (URL) da logo<input id="s-logo" placeholder="https://"></label></div>
+      <div class="card"><h3>Paleta de cores</h3>
+        <div class="swatches">${presets.map((p, i) => `<button class="preset" data-p="${i}"><i style="background:${p[1]}"></i><i style="background:${p[2]}"></i>${p[0]}</button>`).join('')}</div>
+        <div class="two"><label>Cor principal<input id="s-pri" type="color"></label><label>Cor das entradas<input id="s-acc" type="color"></label></div>
+        <label>Cor das saídas<input id="s-dan" type="color"></label></div>
+      <div class="card"><h3>Aparência</h3>
+        <div class="seg" data-f="tema"><button data-v="auto">Automático</button><button data-v="light">Claro</button><button data-v="dark">Escuro</button></div>
+        <label>Arredondamento dos cantos<input id="s-rad" type="range" min="4" max="26"></label></div>
+      <div class="card"><h3>Lançamentos</h3>
+        <small>Cliente (nas entradas) e fornecedor (nas saídas) é obrigatório:</small>
+        <div class="seg" data-f="contato_regra" style="margin-top:8px"><button data-v="opcional">Nunca</button><button data-v="pendente">Se pendente</button><button data-v="sempre">Sempre</button></div>
+        <small>“Se pendente” exige identificar quem deve ou a quem você deve pagar. Vale também ao editar lançamentos antigos.</small></div>
+      </div>`;
+
+    const f = { 's-emp': 'empresa', 's-logo': 'logo', 's-pri': 'primary', 's-acc': 'accent', 's-dan': 'danger', 's-rad': 'radius' };
+    const menu = $('.menu', v), menuBtn = $('[data-menu]', v);
+    const closeMenu = () => { menu.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); };
+
+    // Alterações não salvas: aviso visual + confirmação ao sair da tela (ou fechar a aba)
+    const guard = () => UI.confirm('Você alterou os ajustes e ainda não salvou. Se sair agora, as alterações serão descartadas.',
+      { title: 'Sair sem salvar?', yes: 'Sair sem salvar', no: 'Continuar editando' }).then(r => r === true);
+    const mark = () => {
+      const dt = dirty();
+      $('#s-dirty', v).hidden = !dt;
+      App.leaveGuard = dt ? guard : null;
+      window.onbeforeunload = dt ? e => { e.preventDefault(); e.returnValue = ''; return ''; } : null;
+    };
+
+    const bindLogo = () => { $('.logo-edit .logo', v).innerHTML = d.logo ? `<img src="${esc(d.logo)}" alt="">` : esc((d.empresa || '?')[0].toUpperCase()); };
+    const paint = () => { Object.keys(f).forEach(id => { $('#' + id, v).value = d[f[id]]; }); Theme.apply(d); bindLogo(); mark(); };
+    const repaintSeg = bindSeg(v, d, () => { Theme.apply(d); mark(); });
+    paint();
+
+    v.addEventListener('input', e => { const k = f[e.target.id]; if (k) { d[k] = e.target.value; Theme.apply(d); bindLogo(); mark(); } });
+    v.addEventListener('click', e => {
+      const mb = e.target.closest('[data-menu]');
+      if (mb) { menu.hidden = !menu.hidden; mb.setAttribute('aria-expanded', String(!menu.hidden)); return; }
+      if (!e.target.closest('.menu')) closeMenu();
+      const p = e.target.closest('[data-p]'), save = e.target.closest('[data-save]');
+      if (p) { const x = presets[p.dataset.p]; d.primary = x[1]; d.accent = x[2]; d.danger = x[3]; paint(); }
+      if (e.target.closest('[data-up]')) $('#s-file', v).click();
+      if (e.target.closest('[data-rm]')) { d.logo = ''; paint(); }
+      if (e.target.closest('[data-reset]')) {
+        closeMenu(); Object.assign(d, { primary: '#4F46E5', accent: '#10B981', danger: '#EF4444', tema: 'auto', radius: '14' });
+        paint(); repaintSeg(); UI.toast(dirty() ? 'Padrão restaurado. Toque em Salvar para aplicar.' : 'Os ajustes já estão no padrão.');
+      }
+      if (save) {
+        if (!dirty()) { UI.toast('Nenhuma alteração para salvar.'); return; }
+        UI.busy(save, async () => {
+          Store.config = await API.call('settings.save', d);
+          Object.assign(d, Store.config); saved = JSON.stringify(d);
+          Theme.apply(Store.config); mark(); UI.toast('Ajustes salvos');
+        });
+      }
     });
 
-    function showHelp(msg) { spin.style.display = 'none'; helpMsg.textContent = msg; help.style.display = 'block'; }
-    function load() {
-      help.style.display = 'none'; spin.style.display = 'block'; splash.classList.remove('hide');
-      if (!cfg.APP_URL || /COLE_/.test(cfg.APP_URL)) { showHelp('Falta configurar o link do app. Edite o arquivo config.js (APP_URL).'); return; }
-      document.getElementById('open-direct').href = cfg.APP_URL;
-      if (!navigator.onLine) { showHelp('Sem conexão com a internet. Conecte-se para abrir o fluxo de caixa.'); return; }
-      clearTimeout(timer);
-      timer = setTimeout(function () { showHelp('Está demorando mais que o normal para abrir.'); }, 12000);
-      frame.src = cfg.APP_URL;
-    }
-    frame.addEventListener('load', function () {
-      if (!frame.getAttribute('src')) return;
-      clearTimeout(timer); splash.classList.add('hide');
-    });
-    document.getElementById('retry').addEventListener('click', load);
-    window.addEventListener('online', load);
-    load();
-
-    if ('serviceWorker' in navigator) {                   // atualiza sozinho quando sai uma versão nova da PWA
+    $('#s-file', v).onchange = ev => {
+      const file = ev.target.files[0]; if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 192 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        d.logo = c.toDataURL('image/png');
+        if (d.logo.length > 45000) { d.logo = ''; UI.toast('Imagem muito detalhada. Use uma logo mais simples ou uma URL.', true); }
+        paint();
+      };
+      img.src = URL.createObjectURL(file);
+    };
+  }
+});
+</script>
+  <script>App.start();</script>
+  <script>
+    if ('serviceWorker' in navigator) {                 // atualiza sozinho quando sai uma versão nova da PWA
       var had = !!navigator.serviceWorker.controller, reloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', function () { if (had && !reloaded) { reloaded = true; location.reload(); } });
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
     }
-  })();
   </script>
 </body>
 </html>

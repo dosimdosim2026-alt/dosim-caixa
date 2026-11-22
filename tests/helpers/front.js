@@ -33,10 +33,11 @@ function loadFront(files = ['js_core.html'], opts = {}) {
   const listeners = {}, sent = [], apiCalls = [];
   const handler = opts.api || (() => ({}));
 
-  const document = new Proxy({ addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); }, title: '' }, {
+  const document = new Proxy(Object.assign({ addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); }, title: '' }, opts.docProps), {
     get: (t, k) => (k in t ? t[k] : ghost()), set: (t, k, v) => { t[k] = v; return true }
   });
   const win = { addEventListener() {}, onbeforeunload: null, top: { postMessage: m => sent.push(m) } };
+  if (opts.appConfig) win.APP_CONFIG = opts.appConfig;
   const google = { script: { get run() {
     const st = {};
     const r = {
@@ -54,6 +55,7 @@ function loadFront(files = ['js_core.html'], opts = {}) {
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, Image: function () {}, URL: { createObjectURL: () => '' }
   }, opts.globals));
 
+  if (opts.noGoogle) delete ctx.google;                 // simula a PWA: fora do Apps Script não existe google.script.run
   for (const f of files) new vm.Script(scriptOf(f), { filename: f }).runInContext(ctx);
 
   const raw = code => vm.runInContext(code, ctx);

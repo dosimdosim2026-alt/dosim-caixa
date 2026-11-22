@@ -37,8 +37,31 @@ const ICONS = {
 const ico = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
 
 /* ===== API e estado ===== */
-const API = { call: (route, p, pin) => new Promise((ok, no) =>
-  google.script.run.withSuccessHandler(ok).withFailureHandler(e => no(new Error(e.message || String(e)))).api(route, p || {}, pin === undefined ? Store.pin : pin)) };
+const API = {
+  call(route, p, pin) {
+    const usePin = pin === undefined ? Store.pin : pin;
+    if (typeof google !== 'undefined' && google.script && google.script.run)         // rodando dentro do Apps Script
+      return new Promise((ok, no) => google.script.run.withSuccessHandler(ok)
+        .withFailureHandler(e => no(new Error(e.message || String(e)))).api(route, p || {}, usePin));
+    return API.http(route, p || {}, usePin);                                         // PWA (GitHub Pages)
+  },
+  /** POST "simples" (text/plain, sem cabeçalhos extras, sem cookies): não dispara preflight CORS
+   *  e não depende de conta Google logada, de iframe nem de cookies de terceiros. */
+  async http(route, payload, pin) {
+    const url = (window.APP_CONFIG || {}).APP_URL;
+    if (!url) throw new Error('Link do app não configurado (arquivo config.js).');
+    let res;
+    try {
+      res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ route, payload, pin }), redirect: 'follow', credentials: 'omit' });
+    } catch (e) { throw new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.'); }
+    let json;
+    try { json = await res.json(); }
+    catch (e) { throw new Error('Resposta inválida do servidor. Confirme se o app foi publicado com acesso "Qualquer pessoa".'); }
+    if (!json.ok) throw new Error(json.error || 'Erro no servidor.');
+    return json.data;
+  }
+};
 const Store = { config: {}, categorias: [], catalogo: [], contatos: [], pin: '', mes: today().slice(0, 7) };
 const FORMAS = [['pix', 'Pix', 'Pix'], ['dinheiro', 'Dinheiro (espécie)', 'Dinheiro'], ['credito', 'Cartão de crédito', 'Crédito'],
                 ['debito', 'Cartão de débito', 'Débito'], ['transferencia', 'Transferência bancária', 'Transferência']];
@@ -109,15 +132,12 @@ const Theme = {
     $$('.logo').forEach(l => l.innerHTML = c.logo ? `<img src="${esc(c.logo)}" alt="">` : esc((c.empresa || '?')[0].toUpperCase()));
     $$('.brand-name').forEach(n => n.textContent = c.empresa);
     document.title = c.empresa + ' · Fluxo de caixa';
-    Theme.notifyShell(c);
+    Theme.setBarColor(c.primary);
   },
-  /** Quando o app roda dentro da PWA (iframe), informa as cores para pintar status bar e barra inferior. */
-  notifyShell(c) {
-    try {
-      if (window.top === window) return;
-      const cs = getComputedStyle(document.documentElement);
-      window.top.postMessage({ type: 'cx-theme', primary: c.primary, surface: cs.getPropertyValue('--surface').trim(), bg: cs.getPropertyValue('--bg').trim() }, '*');
-    } catch (e) { /* fora da PWA: ignora */ }
+  /** PWA instalada: a barra de status do Android acompanha a cor da marca definida em Ajustes. */
+  setBarColor(color) {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && /^#[0-9a-fA-F]{6}$/.test(color || '')) meta.setAttribute('content', color);
   }
 };
 

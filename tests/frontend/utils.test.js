@@ -77,17 +77,20 @@ describe('API (ponte com o Apps Script)', () => {
   });
 });
 
-describe('Tema → PWA (cores da marca na tela toda)', () => {
-  test('dentro da PWA (iframe) avisa a janela externa com as cores', () => {
-    const g = loadFront(['js_core.html']);
-    g.eval("Theme.notifyShell({ primary: '#9E4563' })");
-    assert.deepEqual(JSON.parse(JSON.stringify(g.sent)), [{ type: 'cx-theme', primary: '#9E4563', surface: '#ffffff', bg: '#f5f6fa' }]);
-  });
+describe('Tema → barra de status da PWA (cor da marca)', () => {
+  const meta = () => { const m = { attrs: {}, setAttribute(k, v) { m.attrs[k] = v; } }; return m; };
+  const comMeta = m => loadFront(['js_core.html'], { docProps: { querySelector: sel => (sel === 'meta[name="theme-color"]' ? m : null) } });
 
-  test('fora de um iframe não envia nada', () => {
-    const g = loadFront(['js_core.html']);
-    g.win.top = g.win;
-    g.eval("Theme.notifyShell({ primary: '#9E4563' })");
-    assert.equal(g.sent.length, 0);
+  test('setBarColor pinta o theme-color com a cor principal escolhida em Ajustes', () => {
+    const m = meta(); comMeta(m).eval("Theme.setBarColor('#BD647D')");
+    assert.equal(m.attrs.content, '#BD647D');
+  });
+  test('cor inválida é ignorada (não quebra a barra)', () => {
+    const m = meta(); const g = comMeta(m);
+    g.eval("Theme.setBarColor('vermelho'); Theme.setBarColor(''); Theme.setBarColor(undefined)");
+    assert.equal(m.attrs.content, undefined);
+  });
+  test('sem a tag theme-color (link do Apps Script) não dá erro', () => {
+    assert.doesNotThrow(() => loadFront(['js_core.html']).eval("Theme.setBarColor('#BD647D')"));
   });
 });

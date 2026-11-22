@@ -83,7 +83,7 @@ describe('REG-007 — a trava (LockService) ficava presa quando a gravação fal
   });
 });
 
-describe('REG-008 — a PWA só funciona se o app puder ser embutido em iframe', () => {
+describe('REG-008 — o link do Apps Script continua podendo ser embutido em iframe (uso opcional)', () => {
   test('doGet usa XFrameOptionsMode.ALLOWALL', () => {
     const b = loadBackend(); b.ctx.doGet();
     assert.ok(b.html.calls.some(c => c[0] === 'xframe' && c[1] === 'ALLOWALL'));
@@ -122,11 +122,26 @@ describe('REG-012 — com PIN ativo o app precisa pedir o PIN antes de carregar 
   });
 });
 
-describe('REG-013 — o iframe da PWA ficava com o tamanho padrão (300x150) em vez de ocupar a tela', () => {
-  test('a regra do #app define largura e altura explícitas (iframe é elemento "replaced": "auto" não estica)', () => {
+describe('REG-013 — a PWA embutia o app em iframe: ficava 300x150 e depois nem carregava', () => {
+  test('a PWA não usa iframe', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', '..', 'pwa', 'index.html'), 'utf8');
-    const regra = html.match(/#app\s*\{([^}]*)\}/)[1];
-    assert.ok(!/width:\s*auto|height:\s*auto/.test(regra), 'largura/altura "auto" deixam o iframe em 300x150');
-    assert.match(regra, /width:\s*(calc\(100%|100%)/); assert.match(regra, /height:\s*(calc\(100%|100%)/);
+    assert.ok(!/<iframe/i.test(html));
+  });
+});
+
+describe('REG-014 — PWA em iframe quebrava no celular (erro do Drive com várias contas Google; 401 em aba anônima)', () => {
+  test('a PWA fala com o Apps Script por fetch "simples": POST text/plain, sem cookies e sem cabeçalhos extras', async () => {
+    const chamadas = [];
+    const f = loadFront(['js_core.html'], { noGoogle: true, appConfig: { APP_URL: 'https://script.google.com/macros/s/X/exec' },
+      globals: { fetch: async (u, init) => { chamadas.push(init); return { json: async () => ({ ok: true, data: 1 }) }; } } });
+    assert.equal(await f.eval("API.call('categorias.list')"), 1);
+    assert.equal(chamadas[0].credentials, 'omit'); assert.equal(chamadas[0].method, 'POST');
+    assert.deepEqual(Object.keys(chamadas[0].headers), ['Content-Type']);
+    assert.match(chamadas[0].headers['Content-Type'], /^text\/plain/);
+  });
+  test('o servidor tem doPost e responde JSON', () => {
+    const b = loadBackend();
+    const r = JSON.parse(b.ctx.doPost({ postData: { contents: JSON.stringify({ route: 'auth.status' }) } }).getContent());
+    assert.equal(r.ok, true);
   });
 });

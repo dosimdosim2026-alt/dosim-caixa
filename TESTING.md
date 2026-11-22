@@ -28,8 +28,9 @@ node tests/run.js lancamentos   # só arquivos cujo caminho contém "lancamentos
 1. Backend novo → teste em `tests/backend/<modulo>.test.js` (caminho feliz, validações, erros, efeitos colaterais).
 2. Função de tela → função **pura** (como `barChartSvg`) + teste em `tests/frontend/`.
 3. Módulo novo → entra sozinho nos testes de estrutura (ícone, ordem, rotas, include). Rotas novas precisam existir em `routes_()`.
-4. Coluna nova numa aba → **só no fim** do `SCHEMAS`; depois atualize `tests/fixtures/schema-baseline.json` (o teste `schema.test.js` impede renomear/reordenar/remover colunas já em uso).
-5. Mudou algo da PWA → aumente `VERSION` em `pwa/sw.js` **e** `version` em `package.json` (um teste exige que sejam iguais) e acrescente a versão no `CHANGELOG.md`.
+4. Mudou qualquer tela ou script do app (`apps-script/*.html`)? Rode `npm run build` e faça commit do `pwa/index.html` — o teste "pwa/index.html está em dia" reprova a versão desatualizada.
+5. Coluna nova numa aba → **só no fim** do `SCHEMAS`; depois atualize `tests/fixtures/schema-baseline.json` (o teste `schema.test.js` impede renomear/reordenar/remover colunas já em uso).
+6. Mudou algo da PWA → aumente `VERSION` em `pwa/sw.js` **e** `version` em `package.json` (um teste exige que sejam iguais) e acrescente a versão no `CHANGELOG.md`.
 
 ## Limites conhecidos (e próximo passo)
 Não há navegador nos testes: layout, cores e toque no celular continuam sendo verificados à mão (roteiro no `README.md`). Para testar telas de verdade, o caminho natural é adicionar `jsdom` (ou Playwright) como dependência de desenvolvimento e escrever testes em `tests/ui/`.

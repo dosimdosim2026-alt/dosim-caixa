@@ -21,6 +21,23 @@ function include(file) {
 }
 
 /**
+ * API HTTP para a PWA (GitHub Pages): POST com corpo JSON { route, payload, pin }.
+ * Responde sempre JSON: { ok: true, data } ou { ok: false, error }.
+ * O front envia Content-Type text/plain (requisição "simples": o navegador não faz preflight CORS)
+ * e não envia cookies, então não depende de conta Google logada nem de cookies de terceiros.
+ */
+function doPost(e) {
+  let saida;
+  try {
+    const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    saida = { ok: true, data: api(String(req.route || ''), req.payload || {}, req.pin) };
+  } catch (err) {
+    saida = { ok: false, error: String((err && err.message) || err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(saida)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
  * Única função exposta ao frontend: google.script.run.api(rota, payload, pin)
  * Se existir a propriedade de script APP_PIN, toda rota (exceto auth.status) exige o PIN.
  */

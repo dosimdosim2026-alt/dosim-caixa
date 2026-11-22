@@ -8,6 +8,7 @@ param([string]$Descricao = ("v" + (Get-Date -Format "yyyyMMdd-HHmm")))
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
+npm run build
 npm test
 if ($LASTEXITCODE -ne 0) { Write-Host "Testes falharam: deploy cancelado." -ForegroundColor Red; exit 1 }
 
@@ -16,4 +17,4 @@ $id = (Get-Content .deployment-id -Raw).Trim()
 
 clasp push --force
 clasp deploy --deploymentId $id --description $Descricao
-Write-Host "Pronto. Atualize o app com Ctrl+F5." -ForegroundColor Green
+Write-Host "Apps Script publicado. Para atualizar a PWA: git add . ; git commit -m \"...\" ; git push" -ForegroundColor Green

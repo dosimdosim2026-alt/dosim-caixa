@@ -95,6 +95,10 @@ function loadBackend(options = {}) {
       get: k => { const e = cacheData[k]; return e && e.exp > clock.now ? e.v : null; },
       put: (k, v, ttl) => { cacheData[k] = { v: String(v), exp: clock.now + (ttl || 600) }; },
       remove: k => { delete cacheData[k]; } }) },
+    ContentService: {
+      MimeType: { JSON: 'JSON', TEXT: 'TEXT' },
+      createTextOutput: text => { const o = { text, mime: 'TEXT', setMimeType(m) { o.mime = m; return o; }, getContent: () => o.text }; return o; }
+    },
     Utilities: { getUuid: () => crypto.randomUUID(), formatDate },
     Session: { getActiveUser: () => ({ getEmail: () => '' }), getScriptTimeZone: () => 'America/Sao_Paulo' },
     HtmlService: {

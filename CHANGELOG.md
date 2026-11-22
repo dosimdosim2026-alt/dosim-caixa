@@ -3,6 +3,18 @@
 Regra: cada correção ou funcionalidade entra aqui **e** ganha teste (veja `TESTING.md`).
 Correções citam o ID do teste de regressão (`REG-nnn`) em `tests/regression/regression.test.js`.
 
+## [1.1.0] - 2026-11-21
+
+### Mudança de arquitetura da PWA
+- A PWA **deixa de embutir o app em iframe** e passa a rodar a tela do app direto no GitHub Pages, falando com o Apps Script como uma **API HTTP** (`doPost`, POST `text/plain` sem cookies, sem preflight CORS). Não depende mais de conta Google logada nem de cookies de terceiros.
+- `npm run build` gera `pwa/index.html` a partir do mesmo código das telas (`apps-script/`): um só código para o link do Apps Script e para a PWA. Um teste confere que o arquivo gerado está em dia.
+- Barra de status do Android acompanha a cor da marca definida em Ajustes; no iPhone a faixa do topo usa a cor da marca (áreas seguras).
+- O PIN passa a poder ser lembrado no aparelho de verdade (a PWA tem armazenamento próprio).
+
+### Correções
+- REG-013 — a PWA embutia o app em iframe: ficava com o tamanho padrão (300x150) e depois nem carregava. (Teste revisado: a PWA não usa mais iframe.)
+- REG-014 — PWA em iframe quebrava no celular: "Não foi possível abrir o arquivo" (Drive) com várias contas Google e erro 401 em aba anônima.
+
 ## [1.0.1] - 2026-11-21
 
 ### Correções
