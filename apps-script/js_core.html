@@ -7,6 +7,17 @@ const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const pad = n => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const fmtDate = d => String(d).split('-').reverse().slice(0, 2).join('/');
+const fmtDateFull = d => String(d).split('-').reverse().join('/');
+/* Períodos: datas "aaaa-mm-dd" calculadas no horário local (sem passar por UTC, que trocaria o dia) */
+const parseDay = s => { const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const fmtDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDays = (s, n) => { const d = parseDay(s); d.setDate(d.getDate() + n); return fmtDay(d); };
+/** Intervalo {de, ate} (inclusive) do dia, da semana (segunda a domingo) ou do mês que contém a data "ref". */
+function periodRange(modo, ref) {
+  if (modo === 'semana') { const ini = addDays(ref, -((parseDay(ref).getDay() + 6) % 7)); return { de: ini, ate: addDays(ini, 6) }; }
+  if (modo === 'mes') { const d = parseDay(ref); return { de: `${ref.slice(0, 7)}-01`, ate: fmtDay(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }; }
+  return { de: ref, ate: ref };
+}
 /* Máscara bancária: digita-se só números e eles entram da direita para a esquerda (1000 -> R$ 10,00) */
 const maskMoney = v => {
   const d = String(v).replace(/\D/g, '').replace(/^0+/, '').slice(0, 12);

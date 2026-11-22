@@ -3,6 +3,15 @@
 Regra: cada correção ou funcionalidade entra aqui **e** ganha teste (veja `TESTING.md`).
 Correções citam o ID do teste de regressão (`REG-nnn`) em `tests/regression/regression.test.js`.
 
+## [1.2.0] - 2026-11-22
+
+### Novidades
+- **Lançamentos: filtro por período.** Atalhos **Dia**, **Semana** (segunda a domingo) e **Mês**, com setas ‹ › para andar no tempo, e **Período** para escolher qualquer intervalo (De/Até). Os filtros Todos/Entradas/Saídas continuam valendo junto. Se a data inicial passar da final (ou o contrário), a outra ponta acompanha.
+- Ao trocar de atalho, a tela mantém o dia ou mês que você olhava (hoje, se ele estiver dentro do período). Tocar de novo no atalho ativo volta para hoje.
+- **Totais do período** (entradas, saídas e saldo) acima da lista. Contam só lançamentos realizados, como no Painel; o número de pendentes aparece em aviso à parte.
+- Quando o período cruza anos, a lista mostra a data completa (dd/mm/aaaa).
+- API: `lancamentos.list` aceita `de` e `ate` (aaaa-mm-dd, inclusivos). `mes` continua funcionando. Datas fora do formato ou `de` maior que `ate` voltam com mensagem clara.
+
 ## [1.1.0] - 2026-11-21
 
 ### Mudança de arquitetura da PWA

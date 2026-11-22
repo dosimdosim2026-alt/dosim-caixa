@@ -94,3 +94,33 @@ describe('Tema → barra de status da PWA (cor da marca)', () => {
     assert.doesNotThrow(() => loadFront(['js_core.html']).eval("Theme.setBarColor('#BD647D')"));
   });
 });
+
+describe('Períodos (dia, semana, mês)', () => {
+  const r = (modo, ref) => JSON.parse(f.eval(`JSON.stringify(periodRange(${JSON.stringify(modo)}, ${JSON.stringify(ref)}))`));
+
+  test('dia: de = ate = a própria data', () => assert.deepEqual(r('dia', '2026-11-22'), { de: '2026-11-22', ate: '2026-11-22' }));
+
+  test('semana vai de segunda a domingo (domingo pertence à semana que termina nele)', () => {
+    assert.deepEqual(r('semana', '2026-11-22'), { de: '2026-11-16', ate: '2026-11-22' }); // domingo
+    assert.deepEqual(r('semana', '2026-11-16'), { de: '2026-11-16', ate: '2026-11-22' }); // segunda
+    assert.deepEqual(r('semana', '2026-11-18'), { de: '2026-11-16', ate: '2026-11-22' }); // quarta
+  });
+
+  test('semana que atravessa a virada de ano', () => assert.deepEqual(r('semana', '2027-01-01'), { de: '2026-12-28', ate: '2027-01-03' }));
+
+  test('mês: do dia 1 ao último dia (30, 31, fevereiro e bissexto)', () => {
+    assert.deepEqual(r('mes', '2026-11-10'), { de: '2026-11-01', ate: '2026-11-30' });
+    assert.deepEqual(r('mes', '2026-12-31'), { de: '2026-12-01', ate: '2026-12-31' });
+    assert.deepEqual(r('mes', '2027-02-01'), { de: '2027-02-01', ate: '2027-02-28' });
+    assert.deepEqual(r('mes', '2028-02-15'), { de: '2028-02-01', ate: '2028-02-29' });
+  });
+
+  test('addDays anda para frente e para trás, atravessando mês e ano', () => {
+    assert.equal(f.eval("addDays('2026-12-31', 1)"), '2027-01-01');
+    assert.equal(f.eval("addDays('2026-03-01', -1)"), '2026-02-28');
+    assert.equal(f.eval("addDays('2026-11-22', 7)"), '2026-11-29');
+    assert.equal(f.eval("addDays('2026-11-22', -7)"), '2026-11-15');
+  });
+
+  test('fmtDateFull: aaaa-mm-dd → dd/mm/aaaa', () => assert.equal(f.eval("fmtDateFull('2026-11-22')"), '22/11/2026'));
+});

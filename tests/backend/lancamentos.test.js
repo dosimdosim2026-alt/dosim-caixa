@@ -155,3 +155,48 @@ describe('Lançamentos — regra de obrigatoriedade do contato (Ajustes)', () =>
     assert.throws(() => b.call('lancamentos.save', { ...antigo, status: 'pendente' }), /Informe o cliente/);
   });
 });
+
+describe('Lançamentos — filtro por período (dia, semana, mês ou datas livres)', () => {
+  const datas = l => l.map(x => x.data);
+  const base = () => {
+    const b = loadBackend();
+    for (const d of ['2026-11-15', '2026-11-16', '2026-11-18', '2026-11-22', '2026-11-23', '2026-12-01']) b.lanc({ data: d });
+    b.lanc({ tipo: 'saida', data: '2026-11-18' });
+    return b;
+  };
+
+  test('de/ate incluem as duas pontas e vêm da data mais recente para a mais antiga', () => {
+    const b = base();
+    assert.deepEqual(datas(b.call('lancamentos.list', { de: '2026-11-16', ate: '2026-11-22', tipo: 'entrada' })), ['2026-11-22', '2026-11-18', '2026-11-16']);
+  });
+
+  test('um dia só (de = ate)', () => {
+    const b = base();
+    assert.equal(b.call('lancamentos.list', { de: '2026-11-18', ate: '2026-11-18' }).length, 2);
+  });
+
+  test('só "de" ou só "ate" funcionam como limite aberto', () => {
+    const b = base();
+    assert.deepEqual(datas(b.call('lancamentos.list', { de: '2026-11-23', tipo: 'entrada' })), ['2026-12-01', '2026-11-23']);
+    assert.deepEqual(datas(b.call('lancamentos.list', { ate: '2026-11-15', tipo: 'entrada' })), ['2026-11-15']);
+  });
+
+  test('combina com o filtro de tipo e o "mes" continua funcionando', () => {
+    const b = base();
+    assert.equal(b.call('lancamentos.list', { de: '2026-11-01', ate: '2026-11-30', tipo: 'saida' }).length, 1);
+    assert.equal(b.call('lancamentos.list', { mes: '2026-11' }).length, 6);
+  });
+
+  test('período que cruza o ano', () => {
+    const b = loadBackend();
+    b.lanc({ data: '2026-12-31' }); b.lanc({ data: '2027-01-01' }); b.lanc({ data: '2027-01-04' });
+    assert.deepEqual(datas(b.call('lancamentos.list', { de: '2026-12-28', ate: '2027-01-03' })), ['2027-01-01', '2026-12-31']);
+  });
+
+  test('data inicial maior que a final e formato inválido são recusados com mensagem clara', () => {
+    const b = base();
+    assert.throws(() => b.call('lancamentos.list', { de: '2026-11-22', ate: '2026-11-16' }), /inicial não pode ser maior/);
+    assert.throws(() => b.call('lancamentos.list', { de: '22/11/2026' }), /Data inicial do período inválida/);
+    assert.throws(() => b.call('lancamentos.list', { ate: 'amanhã' }), /Data final do período inválida/);
+  });
+});

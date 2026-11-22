@@ -114,6 +114,10 @@ input[type=color]{padding:3px;cursor:pointer}input[type=range]{padding:0;height:
 
 /* Listas */
 .mbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-transform:capitalize;font-weight:700}
+.pbar{margin-bottom:14px}
+.psum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.psum>div{display:flex;flex-direction:column;gap:2px;min-width:0;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.psum small{color:var(--muted);font-size:12px}.psum b{font-size:14px;letter-spacing:-.02em;overflow-wrap:anywhere}
 .list{display:flex;flex-direction:column;gap:8px}
 .item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
 .item:hover{border-color:var(--primary)}
@@ -176,6 +180,17 @@ const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const pad = n => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const fmtDate = d => String(d).split('-').reverse().slice(0, 2).join('/');
+const fmtDateFull = d => String(d).split('-').reverse().join('/');
+/* Períodos: datas "aaaa-mm-dd" calculadas no horário local (sem passar por UTC, que trocaria o dia) */
+const parseDay = s => { const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const fmtDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDays = (s, n) => { const d = parseDay(s); d.setDate(d.getDate() + n); return fmtDay(d); };
+/** Intervalo {de, ate} (inclusive) do dia, da semana (segunda a domingo) ou do mês que contém a data "ref". */
+function periodRange(modo, ref) {
+  if (modo === 'semana') { const ini = addDays(ref, -((parseDay(ref).getDay() + 6) % 7)); return { de: ini, ate: addDays(ini, 6) }; }
+  if (modo === 'mes') { const d = parseDay(ref); return { de: `${ref.slice(0, 7)}-01`, ate: fmtDay(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }; }
+  return { de: ref, ate: ref };
+}
 /* Máscara bancária: digita-se só números e eles entram da direita para a esquerda (1000 -> R$ 10,00) */
 const maskMoney = v => {
   const d = String(v).replace(/\D/g, '').replace(/^0+/, '').slice(0, 12);
@@ -477,6 +492,33 @@ App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
 <script>
 const Lanc = {
   tipo: '',
+  /* Período da lista: 'dia' | 'semana' | 'mes' (usa o mês do seletor do app) | 'custom' (De/Até) */
+  periodo: 'mes', ref: today(), de: today().slice(0, 7) + '-01', ate: today(), _p: 'mes',
+  /** Intervalo {de, ate} do modo informado. */
+  intervalo(modo) {
+    return modo === 'custom' ? { de: this.de, ate: this.ate } : periodRange(modo, modo === 'mes' ? Store.mes + '-01' : this.ref);
+  },
+  /** Barra do período: ‹ › no dia/semana, duas datas em "Período"; o mês usa o seletor do app. */
+  periodBar() {
+    if (this.periodo === 'mes') return monthBar(() => App.refresh());
+    if (this.periodo === 'custom') {
+      const el = h(`<div class="two pbar"><label>De<input id="p-de" type="date"></label><label>Até<input id="p-ate" type="date"></label></div>`);
+      const de = $('#p-de', el), ate = $('#p-ate', el); de.value = this.de; ate.value = this.ate;
+      el.onchange = e => {
+        if (!de.value || !ate.value) { UI.toast('Informe a data inicial e a final.', true); de.value = this.de; ate.value = this.ate; return; }
+        // data inicial depois da final: a outra ponta acompanha a que acabou de mudar
+        if (de.value > ate.value) { if (e.target === de) ate.value = de.value; else de.value = ate.value; }
+        this.de = de.value; this.ate = ate.value; App.refresh();
+      };
+      return el;
+    }
+    const r = this.intervalo(this.periodo), dia = this.periodo === 'dia';
+    const label = dia ? parseDay(r.de).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+      : `${fmtDate(r.de)} – ${fmtDateFull(r.ate)}`;
+    const el = h(`<div class="mbar"><button class="ib" data-d="-1" aria-label="${dia ? 'Dia anterior' : 'Semana anterior'}">‹</button><span>${label}</span><button class="ib" data-d="1" aria-label="${dia ? 'Próximo dia' : 'Próxima semana'}">›</button></div>`);
+    el.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; this.ref = addDays(this.ref, Number(b.dataset.d) * (dia ? 1 : 7)); App.refresh(); };
+    return el;
+  },
   form(item) {
     const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '' }, item || {});
     const original = s.descricao, originalContato = s.contato_nome, OUTRO = '__outro';
@@ -618,14 +660,32 @@ const Lanc = {
 App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20,
   async render(v) {
     v.append(h(`<div class="head"><div><h1>Lançamentos</h1><small>Entradas e saídas do período</small></div></div>`));
-    v.append(monthBar(() => App.refresh()));
+    Lanc._p = Lanc.periodo;
+    v.append(h(`<div class="seg" data-f="periodo"><button data-v="dia">Dia</button><button data-v="semana">Semana</button><button data-v="mes">Mês</button><button data-v="custom">Período</button></div>`));
+    v.append(Lanc.periodBar());
     v.append(h(`<div class="seg" data-f="tipo"><button data-v="">Todos</button><button data-v="entrada">Entradas</button><button data-v="saida">Saídas</button></div>`));
-    bindSeg(v, Lanc, () => App.refresh());
-    const rows = await API.call('lancamentos.list', { mes: Store.mes, tipo: Lanc.tipo });
+    bindSeg(v, Lanc, f => {
+      if (f === 'periodo') { // ao trocar de atalho, mantém o dia/mês que o usuário estava olhando (hoje, se estiver dentro dele)
+        const ant = Lanc._p, nov = Lanc.periodo, r = Lanc.intervalo(ant), t = today();
+        const base = ant === nov || (r.de <= t && t <= r.ate) ? t : r.de; // tocar de novo no mesmo atalho volta para hoje
+        if (nov === 'mes') Store.mes = base.slice(0, 7);
+        else if (nov !== 'custom') Lanc.ref = base;
+        else if (ant !== 'custom') { Lanc.de = r.de; Lanc.ate = r.ate; }
+      }
+      App.refresh();
+    });
+    const r = Lanc.intervalo(Lanc.periodo);
+    const rows = await API.call('lancamentos.list', Lanc.periodo === 'mes' ? { mes: Store.mes, tipo: Lanc.tipo } : { de: r.de, ate: r.ate, tipo: Lanc.tipo });
+    // Totais do período: só lançamentos realizados (igual ao Painel); pendentes ficam de fora
+    const tot = rows.reduce((a, l) => { if (l.status === 'pendente') a.pend++; else a[l.tipo === 'entrada' ? 'ent' : 'sai'] += Number(l.valor); return a; }, { ent: 0, sai: 0, pend: 0 });
+    const saldo = Math.round((tot.ent - tot.sai) * 100) / 100;
+    v.append(h(`<div class="psum"><div><small>Entradas</small><b class="pos">${brl(tot.ent)}</b></div><div><small>Saídas</small><b class="neg">${brl(tot.sai)}</b></div><div><small>Saldo</small><b class="${saldo >= 0 ? 'pos' : 'neg'}">${brl(saldo)}</b></div></div>`));
+    if (tot.pend) v.append(h(`<small class="muted" style="display:block;margin:-6px 0 12px">${tot.pend} pendente${tot.pend > 1 ? 's' : ''} fora dos totais.</small>`));
+    const multiAno = rows.some(l => String(l.data).slice(0, 4) !== String(rows[0].data).slice(0, 4)); // período cruza anos: mostra o ano
     const list = h('<div class="list"></div>');
     list.innerHTML = rows.length ? rows.map(l => { const c = catOf(l.categoria_id), e = l.tipo === 'entrada'; return `
       <button class="item" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
-        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${esc(c.nome)} · ${fmtDate(l.data)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''} ${l.status === 'pendente' ? '<i class="chip warn">Pendente</i>' : ''}</small></span>
+        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${esc(c.nome)} · ${multiAno ? fmtDateFull(l.data) : fmtDate(l.data)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''} ${l.status === 'pendente' ? '<i class="chip warn">Pendente</i>' : ''}</small></span>
         <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b></button>`; }).join('')
       : '<div class="empty">Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.</div>';
     list.onclick = ev => { const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id)); };

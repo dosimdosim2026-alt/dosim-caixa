@@ -26,12 +26,23 @@ function exigirContato_(d, nome) {
     throw new Error(d.tipo === 'entrada' ? 'Informe o cliente deste lançamento.' : 'Informe o fornecedor deste lançamento.');
 }
 
+/** Data do filtro de período: vazia = sem limite; formato diferente de aaaa-mm-dd é recusado. */
+function dataFiltro_(v, qual) {
+  if (v === undefined || v === null || v === '') return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v))) throw new Error('Data ' + qual + ' do período inválida.');
+  return String(v);
+}
+
 function lancamentosRoutes_() {
   const crud = makeCrud_('lancamentos', {
     validate: validarLancamento_,
     filter: function (rows, p) {
+      // Período: "mes" (aaaa-mm) ou intervalo "de"/"ate" (aaaa-mm-dd, inclusive nas duas pontas).
+      const de = dataFiltro_(p.de, 'inicial'), ate = dataFiltro_(p.ate, 'final');
+      if (de && ate && de > ate) throw new Error('A data inicial não pode ser maior que a final.');
       return rows.filter(function (r) {
-        return (!p.mes || String(r.data).indexOf(p.mes) === 0) && (!p.tipo || r.tipo === p.tipo);
+        const d = String(r.data);
+        return (!p.mes || d.indexOf(p.mes) === 0) && (!de || d >= de) && (!ate || d <= ate) && (!p.tipo || r.tipo === p.tipo);
       });
     },
     sort: function (a, b) { return String(b.data).localeCompare(String(a.data)); }

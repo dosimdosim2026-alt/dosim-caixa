@@ -96,6 +96,10 @@ input[type=color]{padding:3px;cursor:pointer}input[type=range]{padding:0;height:
 
 /* Listas */
 .mbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-transform:capitalize;font-weight:700}
+.pbar{margin-bottom:14px}
+.psum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.psum>div{display:flex;flex-direction:column;gap:2px;min-width:0;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.psum small{color:var(--muted);font-size:12px}.psum b{font-size:14px;letter-spacing:-.02em;overflow-wrap:anywhere}
 .list{display:flex;flex-direction:column;gap:8px}
 .item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
 .item:hover{border-color:var(--primary)}
