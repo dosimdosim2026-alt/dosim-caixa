@@ -127,10 +127,30 @@ input[type=color]{padding:3px;cursor:pointer}input[type=range]{padding:0;height:
 .dot svg{width:18px;height:18px}
 .chip{font-style:normal;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--surface-2)}
 .chip.warn{background:color-mix(in srgb,#F59E0B 20%,transparent);color:#B45309}
+.chip.late{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.chip.today{background:color-mix(in srgb,#F59E0B 28%,transparent);color:#B45309}
+.chip.soon{background:color-mix(in srgb,#F59E0B 14%,transparent);color:#B45309}
+.item:focus-visible{outline:3px solid var(--primary-soft);border-color:var(--primary)}
+.ib.ok{background:color-mix(in srgb,var(--in) 16%,transparent);color:var(--in)}
+.ib.ok:hover{background:color-mix(in srgb,var(--in) 28%,transparent)}
+.dayh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:12px 2px 0;font-size:13px;font-weight:700;color:var(--muted)}
+.dayh:first-child{margin-top:0}.dayh b::first-letter{text-transform:uppercase}.dayh small{font-weight:700}
+/* Alerta de vencimento */
+.nav{position:relative}
+.bdg{position:absolute;top:0;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:var(--danger);color:#fff;font:700 10px/17px var(--font);font-style:normal;text-align:center;box-shadow:0 0 0 2px var(--surface)}
+.side .bdg{position:static;margin-left:auto;box-shadow:none}
+.venc{margin-top:14px}.venc.alert{border-color:color-mix(in srgb,var(--danger) 45%,var(--border))}
+.venc h3{display:flex;align-items:center;gap:8px}.venc h3 svg{width:18px;height:18px;color:var(--danger)}
+.vsum{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.vsum .chip{font-size:12px;padding:4px 10px}
+.vrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+.vrow .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.vrow .v{white-space:nowrap;font-size:14px}
+.vall{width:100%;margin-top:6px}
 .bar{height:8px;border-radius:9px;background:var(--surface-2);overflow:hidden;margin:6px 0 14px}
 .bar i{display:block;height:100%;border-radius:9px;background:var(--c)}
 .cat-row{display:flex;justify-content:space-between;gap:12px;font-size:14px;font-weight:600}.cat-row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.busy::after{content:'Carregando…';display:block;text-align:center;color:var(--muted);padding:40px 16px}
+.busy::after{content:'';display:block;height:200px;margin-top:6px;border-radius:var(--radius);background:linear-gradient(90deg,var(--surface-2) 25%,color-mix(in srgb,var(--surface-2) 50%,var(--surface)) 50%,var(--surface-2) 75%) 0 0/300% 100%;animation:shim 1.3s ease-in-out infinite}
+@keyframes shim{from{background-position:100% 0}to{background-position:0 0}}
+@media(prefers-reduced-motion:reduce){.busy::after{animation:none}}
 .empty,.load{text-align:center;color:var(--muted);padding:40px 16px}
 svg.chart text{fill:var(--muted);font-size:11px;font-family:var(--font)}
 svg.chart text.v{font-size:11px;font-weight:600}svg.chart text.v.in{fill:var(--in)}svg.chart text.v.out{fill:var(--out)}
@@ -191,6 +211,28 @@ function periodRange(modo, ref) {
   if (modo === 'mes') { const d = parseDay(ref); return { de: `${ref.slice(0, 7)}-01`, ate: fmtDay(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }; }
   return { de: ref, ate: ref };
 }
+const daysBetween = (a, b) => Math.round((parseDay(b) - parseDay(a)) / 864e5); // negativo: b é anterior a a
+/** Situação de uma despesa a pagar (saída pendente) frente a "hoje": vencida, vence hoje ou vence em até 7 dias. Outros: null. */
+function vencInfo(l, hoje) {
+  if (!l || l.tipo !== 'saida' || l.status !== 'pendente') return null;
+  const n = daysBetween(hoje, l.data);
+  if (n < 0) return { n, cls: 'late', texto: n === -1 ? 'Venceu ontem' : `Vencida há ${-n} dias` };
+  if (n === 0) return { n, cls: 'today', texto: 'Vence hoje' };
+  if (n <= 7) return { n, cls: 'soon', texto: n === 1 ? 'Vence amanhã' : `Vence em ${n} dias` };
+  return null;
+}
+/** Título do dia na lista: "Hoje, 22/11", "Ontem, 21/11", "sexta-feira, 20/11" (com o ano, se não for o ano atual). */
+function dayLabel(d, hoje) {
+  const n = daysBetween(hoje, d), dm = String(d).slice(0, 4) === String(hoje).slice(0, 4) ? fmtDate(d) : fmtDateFull(d);
+  if (n === 0) return 'Hoje, ' + dm; if (n === -1) return 'Ontem, ' + dm; if (n === 1) return 'Amanhã, ' + dm;
+  return parseDay(d).toLocaleDateString('pt-BR', { weekday: 'long' }) + ', ' + dm;
+}
+/** Agrupa linhas (já ordenadas por data) em [{ data, itens }], mantendo a ordem. */
+function groupByDay(rows) {
+  const out = [];
+  rows.forEach(r => { const g = out[out.length - 1]; if (g && g.data === r.data) g.itens.push(r); else out.push({ data: r.data, itens: [r] }); });
+  return out;
+}
 /* Máscara bancária: digita-se só números e eles entram da direita para a esquerda (1000 -> R$ 10,00) */
 const maskMoney = v => {
   const d = String(v).replace(/\D/g, '').replace(/^0+/, '').slice(0, 12);
@@ -216,7 +258,9 @@ const ICONS = {
   grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
   dots:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
 };
 const ico = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
 
@@ -325,6 +369,39 @@ const Theme = {
   }
 };
 
+/* ===== Alerta de vencimento (despesas a pagar) ===== */
+const Venc = {
+  dados: null, _p: null,
+  /** Busca vencidas / vence hoje / próximos 7 dias. Chamadas simultâneas dividem a mesma requisição. */
+  load() {
+    if (!this._p) this._p = (async () => {
+      try { this.dados = await API.call('lancamentos.vencimentos', { hoje: today() }); }
+      catch (e) { /* o alerta é auxiliar: se falhar, a tela segue sem ele */ }
+      this.badge(); return this.dados;
+    })().finally(() => { this._p = null; });
+    return this._p;
+  },
+  /** Bolinha vermelha no menu de Lançamentos: vencidas + vencem hoje. */
+  badge() {
+    const n = this.dados ? this.dados.alertas : 0;
+    $$('.nav[data-id="lancamentos"]').forEach(el => {
+      let b = $('.bdg', el);
+      if (!n) { if (b) b.remove(); return; }
+      if (!b) { b = h('<i class="bdg"></i>'); el.append(b); }
+      b.textContent = n > 9 ? '9+' : String(n);
+      b.setAttribute('aria-label', n + (n > 1 ? ' contas vencidas ou vencendo hoje' : ' conta vencida ou vencendo hoje'));
+    });
+  },
+  /** Aviso (toast interno) ao abrir o app. */
+  avisar() {
+    const r = this.dados && this.dados.resumo; if (!r) return;
+    const v = r.vencidas.qtd, t = r.hoje.qtd, p = [];
+    if (v) p.push(`${v} conta${v > 1 ? 's' : ''} vencida${v > 1 ? 's' : ''}`);
+    if (t) p.push(`${t} vence${t > 1 ? 'm' : ''} hoje`);
+    if (p.length) UI.toast('Atenção: ' + p.join(' e '), v > 0);
+  }
+};
+
 /* ===== App: registro de módulos + navegação ===== */
 const App = {
   mods: [],
@@ -375,6 +452,7 @@ const App = {
     try { await Auth.ensure(); const b = await API.call('core.bootstrap'); Store.config = b.config; Store.categorias = b.categorias; Store.catalogo = b.catalogo; Store.contatos = b.contatos; }
     catch (e) { $('#app').innerHTML = `<div class="empty" style="margin:auto">Erro ao iniciar: ${esc(e.message)}</div>`; return; }
     this.shell(); Theme.apply(Store.config); this.go(this.mods[0].id);
+    Venc.load().then(() => Venc.avisar());
   }
 };
 </script>
@@ -453,11 +531,36 @@ function barChartSvg(serie, W) {
     }).join('') + '</svg>';
 }
 
+/** Card "Contas a pagar": vencidas, vencem hoje e próximos dias, com baixa em um toque (null se não há o que mostrar). */
+function vencCard(d) {
+  if (!d || !d.itens.length) return null;
+  const r = d.resumo, mostra = d.itens.slice(0, 5), hoje = today();
+  const chip = (k, cls, txt) => k.qtd ? `<i class="chip ${cls}">${txt(k.qtd)} · ${brl(k.total)}</i>` : '';
+  const linha = i => {
+    const vi = vencInfo(Object.assign({ tipo: 'saida', status: 'pendente' }, i), hoje);
+    return `<div class="vrow"><span class="grow"><b>${esc(i.descricao || catOf(i.categoria_id).nome)}</b>
+      <small>${vi ? `<i class="chip ${vi.cls}">${vi.texto}</i> ` : ''}${i.contato_nome ? esc(i.contato_nome) + ' · ' : ''}${fmtDateFull(i.data)}</small></span>
+      <b class="neg v">${brl(i.valor)}</b><button class="ib ok" data-baixa="${i.id}" aria-label="Dar baixa" title="Dar baixa">${ico('check')}</button></div>`;
+  };
+  const el = h(`<div class="card venc ${d.alertas ? 'alert' : ''}"><h3>${ico('alert')} Contas a pagar</h3>
+    <div class="vsum">${chip(r.vencidas, 'late', n => `${n} vencida${n > 1 ? 's' : ''}`)}${chip(r.hoje, 'today', n => `${n} vence${n > 1 ? 'm' : ''} hoje`)}${chip(r.proximas, 'soon', n => `${n} nos próximos ${d.dias} dias`)}</div>
+    ${mostra.map(linha).join('')}
+    <button class="btn vall" data-ver>${d.itens.length > mostra.length ? `Ver todas (${d.itens.length})` : 'Ver em Lançamentos'}</button></div>`);
+  el.onclick = e => {
+    const b = e.target.closest('[data-baixa]');
+    if (b) { const i = d.itens.find(x => x.id === b.dataset.baixa); if (i) Lanc.baixar(Object.assign({ tipo: 'saida' }, i)); return; }
+    if (e.target.closest('[data-ver]')) Lanc.verPendentes();
+  };
+  return el;
+}
+
 App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
   async render(v) {
     v.append(h(`<div class="head"><div><h1>Painel</h1><small>Resumo do fluxo de caixa</small></div></div>`));
+    const slot = h('<div></div>'); v.append(slot); // alerta de vencimento: vale para qualquer mês, fica acima do seletor
     v.append(monthBar(() => App.refresh()));
-    const d = await API.call('dashboard.summary', { mes: Store.mes });
+    const [d, venc] = await Promise.all([API.call('dashboard.summary', { mes: Store.mes }), Venc.load()]);
+    const vc = vencCard(venc); if (vc) slot.append(vc);
     const draw = wrap => { const W = Math.floor(wrap.clientWidth); if (W >= 120) wrap.innerHTML = barChartSvg(d.serie, W); };
     const maxCat = Math.max(1, ...d.porCategoria.map(c => c.total));
     const cats = d.porCategoria.length ? d.porCategoria.map(c =>
@@ -491,7 +594,7 @@ App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
 </script>
 <script>
 const Lanc = {
-  tipo: '',
+  tipo: '', status: '', // status: '' (todos) | 'pendente'
   /* Período da lista: 'dia' | 'semana' | 'mes' (usa o mês do seletor do app) | 'custom' (De/Até) */
   periodo: 'mes', ref: today(), de: today().slice(0, 7) + '-01', ate: today(), _p: 'mes',
   /** Intervalo {de, ate} do modo informado. */
@@ -518,6 +621,32 @@ const Lanc = {
     const el = h(`<div class="mbar"><button class="ib" data-d="-1" aria-label="${dia ? 'Dia anterior' : 'Semana anterior'}">‹</button><span>${label}</span><button class="ib" data-d="1" aria-label="${dia ? 'Próximo dia' : 'Próxima semana'}">›</button></div>`);
     el.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; this.ref = addDays(this.ref, Number(b.dataset.d) * (dia ? 1 : 7)); App.refresh(); };
     return el;
+  },
+  /** Dar baixa em um pendente: confirma a data do pagamento (ou recebimento) e marca como realizado. */
+  baixar(l) {
+    const ent = l.tipo === 'entrada', acao = ent ? 'recebimento' : 'pagamento';
+    UI.modal(ent ? 'Confirmar recebimento' : 'Confirmar pagamento',
+      `<p class="muted" style="margin-bottom:14px">${esc(l.descricao || catOf(l.categoria_id).nome)} · <b>${brl(l.valor)}</b><br>Vencimento: ${fmtDateFull(l.data)}</p>
+       <label>Data do ${acao}<input id="b-data" type="date"></label>
+       <div class="row end"><button class="btn" data-n>Cancelar</button><button class="btn primary" data-ok>Confirmar ${acao}</button></div>`,
+      (box, close) => {
+        $('#b-data', box).value = today();
+        box.onclick = e => {
+          if (e.target.closest('[data-n]')) close();
+          const ok = e.target.closest('[data-ok]');
+          if (ok) UI.busy(ok, async () => {
+            await API.call('lancamentos.baixar', { id: l.id, data: $('#b-data', box).value });
+            close(); UI.toast(ent ? 'Recebimento confirmado' : 'Pagamento confirmado'); Venc.load(); App.refresh();
+          });
+        };
+      });
+  },
+  /** Atalho do alerta: abre as pendências a pagar, da mais atrasada até o fim da janela de aviso. */
+  verPendentes() {
+    const it = (Venc.dados && Venc.dados.itens) || [], t = today();
+    this.status = 'pendente'; this.tipo = 'saida'; this.periodo = 'custom';
+    this.de = it.length && it[0].data < t ? it[0].data : t; this.ate = addDays(t, (Venc.dados && Venc.dados.dias) || 7);
+    App.go('lancamentos');
   },
   form(item) {
     const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '' }, item || {});
@@ -647,10 +776,10 @@ const Lanc = {
             data: el('f-data').value, categoria_id: el('f-cat').value, forma: el('f-forma').value });
           if (salvar) Store.catalogo = await API.call('catalogo.list');
           if (salvarC) Store.contatos = await API.call('contatos.list');
-          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); App.refresh();
+          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); Venc.load(); App.refresh();
         });
         if (del && await UI.confirm('Excluir este lançamento?')) UI.busy(del, async () => {
-          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); App.refresh();
+          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); Venc.load(); App.refresh();
         });
       });
     });
@@ -664,6 +793,7 @@ App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20
     v.append(h(`<div class="seg" data-f="periodo"><button data-v="dia">Dia</button><button data-v="semana">Semana</button><button data-v="mes">Mês</button><button data-v="custom">Período</button></div>`));
     v.append(Lanc.periodBar());
     v.append(h(`<div class="seg" data-f="tipo"><button data-v="">Todos</button><button data-v="entrada">Entradas</button><button data-v="saida">Saídas</button></div>`));
+    v.append(h(`<div class="seg" data-f="status"><button data-v="">Todos os status</button><button data-v="pendente">Só pendentes</button></div>`));
     bindSeg(v, Lanc, f => {
       if (f === 'periodo') { // ao trocar de atalho, mantém o dia/mês que o usuário estava olhando (hoje, se estiver dentro dele)
         const ant = Lanc._p, nov = Lanc.periodo, r = Lanc.intervalo(ant), t = today();
@@ -675,20 +805,36 @@ App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20
       App.refresh();
     });
     const r = Lanc.intervalo(Lanc.periodo);
-    const rows = await API.call('lancamentos.list', Lanc.periodo === 'mes' ? { mes: Store.mes, tipo: Lanc.tipo } : { de: r.de, ate: r.ate, tipo: Lanc.tipo });
-    // Totais do período: só lançamentos realizados (igual ao Painel); pendentes ficam de fora
-    const tot = rows.reduce((a, l) => { if (l.status === 'pendente') a.pend++; else a[l.tipo === 'entrada' ? 'ent' : 'sai'] += Number(l.valor); return a; }, { ent: 0, sai: 0, pend: 0 });
-    const saldo = Math.round((tot.ent - tot.sai) * 100) / 100;
-    v.append(h(`<div class="psum"><div><small>Entradas</small><b class="pos">${brl(tot.ent)}</b></div><div><small>Saídas</small><b class="neg">${brl(tot.sai)}</b></div><div><small>Saldo</small><b class="${saldo >= 0 ? 'pos' : 'neg'}">${brl(saldo)}</b></div></div>`));
-    if (tot.pend) v.append(h(`<small class="muted" style="display:block;margin:-6px 0 12px">${tot.pend} pendente${tot.pend > 1 ? 's' : ''} fora dos totais.</small>`));
-    const multiAno = rows.some(l => String(l.data).slice(0, 4) !== String(rows[0].data).slice(0, 4)); // período cruza anos: mostra o ano
+    const pend = Lanc.status === 'pendente', hoje = today();
+    const q = Lanc.periodo === 'mes' ? { mes: Store.mes } : { de: r.de, ate: r.ate };
+    const rows = await API.call('lancamentos.list', Object.assign(q, { tipo: Lanc.tipo, status: Lanc.status }));
+    if (pend) rows.reverse(); // só pendentes: do vencimento mais próximo (ou mais atrasado) para o mais distante
+    // Totais do período: só lançamentos realizados (igual ao Painel). Em "Só pendentes": a receber, a pagar e saldo previsto.
+    const conta = l => pend || l.status !== 'pendente', base = rows.filter(conta);
+    const soma = t => base.filter(l => l.tipo === t).reduce((s, l) => s + Number(l.valor), 0);
+    const ent = soma('entrada'), sai = soma('saida'), saldo = Math.round((ent - sai) * 100) / 100, nPend = rows.length - base.length;
+    v.append(h(`<div class="psum"><div><small>${pend ? 'A receber' : 'Entradas'}</small><b class="pos">${brl(ent)}</b></div><div><small>${pend ? 'A pagar' : 'Saídas'}</small><b class="neg">${brl(sai)}</b></div><div><small>${pend ? 'Saldo previsto' : 'Saldo'}</small><b class="${saldo >= 0 ? 'pos' : 'neg'}">${brl(saldo)}</b></div></div>`));
+    if (nPend) v.append(h(`<small class="muted" style="display:block;margin:-6px 0 12px">${nPend} pendente${nPend > 1 ? 's' : ''} fora dos totais.</small>`));
+    const linha = l => {
+      const c = catOf(l.categoria_id), e = l.tipo === 'entrada', vi = vencInfo(l, hoje);
+      const chip = l.status !== 'pendente' ? '' : vi ? `<i class="chip ${vi.cls}">${vi.texto}</i>` : '<i class="chip warn">Pendente</i>';
+      return `<div class="item" role="button" tabindex="0" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
+        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${chip} ${esc(c.nome)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''}</small></span>
+        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b>
+        ${l.status === 'pendente' ? `<button class="ib ok" data-baixa="${l.id}" aria-label="Dar baixa" title="Dar baixa">${ico('check')}</button>` : ''}</div>`;
+    };
+    const dia = g => { // cabeçalho do dia com o resultado do dia (realizados)
+      const s = Math.round(g.itens.filter(conta).reduce((t, l) => t + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor), 0) * 100) / 100;
+      return `<div class="dayh"><b>${dayLabel(g.data, hoje)}</b>${s ? `<small class="${s > 0 ? 'pos' : 'neg'}">${s > 0 ? '+' : '−'}${brl(Math.abs(s))}</small>` : ''}</div>${g.itens.map(linha).join('')}`;
+    };
     const list = h('<div class="list"></div>');
-    list.innerHTML = rows.length ? rows.map(l => { const c = catOf(l.categoria_id), e = l.tipo === 'entrada'; return `
-      <button class="item" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
-        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${esc(c.nome)} · ${multiAno ? fmtDateFull(l.data) : fmtDate(l.data)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''} ${l.status === 'pendente' ? '<i class="chip warn">Pendente</i>' : ''}</small></span>
-        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b></button>`; }).join('')
-      : '<div class="empty">Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.</div>';
-    list.onclick = ev => { const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id)); };
+    list.innerHTML = rows.length ? groupByDay(rows).map(dia).join('')
+      : `<div class="empty">${pend ? 'Nenhuma pendência neste período.' : 'Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.'}</div>`;
+    list.onclick = ev => {
+      const bx = ev.target.closest('[data-baixa]'); if (bx) return Lanc.baixar(rows.find(r => r.id === bx.dataset.baixa));
+      const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id));
+    };
+    list.onkeydown = ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList.contains('item')) { ev.preventDefault(); ev.target.click(); } };
     v.append(list);
   }
 });

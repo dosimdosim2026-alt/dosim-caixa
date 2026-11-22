@@ -1,6 +1,6 @@
 <script>
 const Lanc = {
-  tipo: '',
+  tipo: '', status: '', // status: '' (todos) | 'pendente'
   /* Período da lista: 'dia' | 'semana' | 'mes' (usa o mês do seletor do app) | 'custom' (De/Até) */
   periodo: 'mes', ref: today(), de: today().slice(0, 7) + '-01', ate: today(), _p: 'mes',
   /** Intervalo {de, ate} do modo informado. */
@@ -27,6 +27,32 @@ const Lanc = {
     const el = h(`<div class="mbar"><button class="ib" data-d="-1" aria-label="${dia ? 'Dia anterior' : 'Semana anterior'}">‹</button><span>${label}</span><button class="ib" data-d="1" aria-label="${dia ? 'Próximo dia' : 'Próxima semana'}">›</button></div>`);
     el.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; this.ref = addDays(this.ref, Number(b.dataset.d) * (dia ? 1 : 7)); App.refresh(); };
     return el;
+  },
+  /** Dar baixa em um pendente: confirma a data do pagamento (ou recebimento) e marca como realizado. */
+  baixar(l) {
+    const ent = l.tipo === 'entrada', acao = ent ? 'recebimento' : 'pagamento';
+    UI.modal(ent ? 'Confirmar recebimento' : 'Confirmar pagamento',
+      `<p class="muted" style="margin-bottom:14px">${esc(l.descricao || catOf(l.categoria_id).nome)} · <b>${brl(l.valor)}</b><br>Vencimento: ${fmtDateFull(l.data)}</p>
+       <label>Data do ${acao}<input id="b-data" type="date"></label>
+       <div class="row end"><button class="btn" data-n>Cancelar</button><button class="btn primary" data-ok>Confirmar ${acao}</button></div>`,
+      (box, close) => {
+        $('#b-data', box).value = today();
+        box.onclick = e => {
+          if (e.target.closest('[data-n]')) close();
+          const ok = e.target.closest('[data-ok]');
+          if (ok) UI.busy(ok, async () => {
+            await API.call('lancamentos.baixar', { id: l.id, data: $('#b-data', box).value });
+            close(); UI.toast(ent ? 'Recebimento confirmado' : 'Pagamento confirmado'); Venc.load(); App.refresh();
+          });
+        };
+      });
+  },
+  /** Atalho do alerta: abre as pendências a pagar, da mais atrasada até o fim da janela de aviso. */
+  verPendentes() {
+    const it = (Venc.dados && Venc.dados.itens) || [], t = today();
+    this.status = 'pendente'; this.tipo = 'saida'; this.periodo = 'custom';
+    this.de = it.length && it[0].data < t ? it[0].data : t; this.ate = addDays(t, (Venc.dados && Venc.dados.dias) || 7);
+    App.go('lancamentos');
   },
   form(item) {
     const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '' }, item || {});
@@ -156,10 +182,10 @@ const Lanc = {
             data: el('f-data').value, categoria_id: el('f-cat').value, forma: el('f-forma').value });
           if (salvar) Store.catalogo = await API.call('catalogo.list');
           if (salvarC) Store.contatos = await API.call('contatos.list');
-          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); App.refresh();
+          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); Venc.load(); App.refresh();
         });
         if (del && await UI.confirm('Excluir este lançamento?')) UI.busy(del, async () => {
-          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); App.refresh();
+          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); Venc.load(); App.refresh();
         });
       });
     });
@@ -173,6 +199,7 @@ App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20
     v.append(h(`<div class="seg" data-f="periodo"><button data-v="dia">Dia</button><button data-v="semana">Semana</button><button data-v="mes">Mês</button><button data-v="custom">Período</button></div>`));
     v.append(Lanc.periodBar());
     v.append(h(`<div class="seg" data-f="tipo"><button data-v="">Todos</button><button data-v="entrada">Entradas</button><button data-v="saida">Saídas</button></div>`));
+    v.append(h(`<div class="seg" data-f="status"><button data-v="">Todos os status</button><button data-v="pendente">Só pendentes</button></div>`));
     bindSeg(v, Lanc, f => {
       if (f === 'periodo') { // ao trocar de atalho, mantém o dia/mês que o usuário estava olhando (hoje, se estiver dentro dele)
         const ant = Lanc._p, nov = Lanc.periodo, r = Lanc.intervalo(ant), t = today();
@@ -184,20 +211,36 @@ App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20
       App.refresh();
     });
     const r = Lanc.intervalo(Lanc.periodo);
-    const rows = await API.call('lancamentos.list', Lanc.periodo === 'mes' ? { mes: Store.mes, tipo: Lanc.tipo } : { de: r.de, ate: r.ate, tipo: Lanc.tipo });
-    // Totais do período: só lançamentos realizados (igual ao Painel); pendentes ficam de fora
-    const tot = rows.reduce((a, l) => { if (l.status === 'pendente') a.pend++; else a[l.tipo === 'entrada' ? 'ent' : 'sai'] += Number(l.valor); return a; }, { ent: 0, sai: 0, pend: 0 });
-    const saldo = Math.round((tot.ent - tot.sai) * 100) / 100;
-    v.append(h(`<div class="psum"><div><small>Entradas</small><b class="pos">${brl(tot.ent)}</b></div><div><small>Saídas</small><b class="neg">${brl(tot.sai)}</b></div><div><small>Saldo</small><b class="${saldo >= 0 ? 'pos' : 'neg'}">${brl(saldo)}</b></div></div>`));
-    if (tot.pend) v.append(h(`<small class="muted" style="display:block;margin:-6px 0 12px">${tot.pend} pendente${tot.pend > 1 ? 's' : ''} fora dos totais.</small>`));
-    const multiAno = rows.some(l => String(l.data).slice(0, 4) !== String(rows[0].data).slice(0, 4)); // período cruza anos: mostra o ano
+    const pend = Lanc.status === 'pendente', hoje = today();
+    const q = Lanc.periodo === 'mes' ? { mes: Store.mes } : { de: r.de, ate: r.ate };
+    const rows = await API.call('lancamentos.list', Object.assign(q, { tipo: Lanc.tipo, status: Lanc.status }));
+    if (pend) rows.reverse(); // só pendentes: do vencimento mais próximo (ou mais atrasado) para o mais distante
+    // Totais do período: só lançamentos realizados (igual ao Painel). Em "Só pendentes": a receber, a pagar e saldo previsto.
+    const conta = l => pend || l.status !== 'pendente', base = rows.filter(conta);
+    const soma = t => base.filter(l => l.tipo === t).reduce((s, l) => s + Number(l.valor), 0);
+    const ent = soma('entrada'), sai = soma('saida'), saldo = Math.round((ent - sai) * 100) / 100, nPend = rows.length - base.length;
+    v.append(h(`<div class="psum"><div><small>${pend ? 'A receber' : 'Entradas'}</small><b class="pos">${brl(ent)}</b></div><div><small>${pend ? 'A pagar' : 'Saídas'}</small><b class="neg">${brl(sai)}</b></div><div><small>${pend ? 'Saldo previsto' : 'Saldo'}</small><b class="${saldo >= 0 ? 'pos' : 'neg'}">${brl(saldo)}</b></div></div>`));
+    if (nPend) v.append(h(`<small class="muted" style="display:block;margin:-6px 0 12px">${nPend} pendente${nPend > 1 ? 's' : ''} fora dos totais.</small>`));
+    const linha = l => {
+      const c = catOf(l.categoria_id), e = l.tipo === 'entrada', vi = vencInfo(l, hoje);
+      const chip = l.status !== 'pendente' ? '' : vi ? `<i class="chip ${vi.cls}">${vi.texto}</i>` : '<i class="chip warn">Pendente</i>';
+      return `<div class="item" role="button" tabindex="0" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
+        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${chip} ${esc(c.nome)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''}</small></span>
+        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b>
+        ${l.status === 'pendente' ? `<button class="ib ok" data-baixa="${l.id}" aria-label="Dar baixa" title="Dar baixa">${ico('check')}</button>` : ''}</div>`;
+    };
+    const dia = g => { // cabeçalho do dia com o resultado do dia (realizados)
+      const s = Math.round(g.itens.filter(conta).reduce((t, l) => t + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor), 0) * 100) / 100;
+      return `<div class="dayh"><b>${dayLabel(g.data, hoje)}</b>${s ? `<small class="${s > 0 ? 'pos' : 'neg'}">${s > 0 ? '+' : '−'}${brl(Math.abs(s))}</small>` : ''}</div>${g.itens.map(linha).join('')}`;
+    };
     const list = h('<div class="list"></div>');
-    list.innerHTML = rows.length ? rows.map(l => { const c = catOf(l.categoria_id), e = l.tipo === 'entrada'; return `
-      <button class="item" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
-        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${esc(c.nome)} · ${multiAno ? fmtDateFull(l.data) : fmtDate(l.data)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''} ${l.status === 'pendente' ? '<i class="chip warn">Pendente</i>' : ''}</small></span>
-        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b></button>`; }).join('')
-      : '<div class="empty">Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.</div>';
-    list.onclick = ev => { const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id)); };
+    list.innerHTML = rows.length ? groupByDay(rows).map(dia).join('')
+      : `<div class="empty">${pend ? 'Nenhuma pendência neste período.' : 'Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.'}</div>`;
+    list.onclick = ev => {
+      const bx = ev.target.closest('[data-baixa]'); if (bx) return Lanc.baixar(rows.find(r => r.id === bx.dataset.baixa));
+      const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id));
+    };
+    list.onkeydown = ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList.contains('item')) { ev.preventDefault(); ev.target.click(); } };
     v.append(list);
   }
 });

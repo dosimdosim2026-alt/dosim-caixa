@@ -124,3 +124,77 @@ describe('Períodos (dia, semana, mês)', () => {
 
   test('fmtDateFull: aaaa-mm-dd → dd/mm/aaaa', () => assert.equal(f.eval("fmtDateFull('2026-11-22')"), '22/11/2026'));
 });
+
+describe('Alerta de vencimento e lista por dia', () => {
+  const HOJE = '2026-11-22';
+  const vi = (data, extra = {}) => JSON.parse(f.eval(`JSON.stringify(vencInfo(${JSON.stringify({ tipo: 'saida', status: 'pendente', data, ...extra })}, ${JSON.stringify(HOJE)}))`));
+
+  test('despesa pendente: vencida, vence hoje, amanhã e em até 7 dias', () => {
+    assert.deepEqual(vi('2026-11-10'), { n: -12, cls: 'late', texto: 'Vencida há 12 dias' });
+    assert.deepEqual(vi('2026-11-21'), { n: -1, cls: 'late', texto: 'Venceu ontem' });
+    assert.deepEqual(vi('2026-11-22'), { n: 0, cls: 'today', texto: 'Vence hoje' });
+    assert.deepEqual(vi('2026-11-23'), { n: 1, cls: 'soon', texto: 'Vence amanhã' });
+    assert.deepEqual(vi('2026-11-29'), { n: 7, cls: 'soon', texto: 'Vence em 7 dias' });
+  });
+
+  test('mais de 7 dias, despesa paga e entrada pendente não geram alerta', () => {
+    assert.equal(vi('2026-11-30'), null);
+    assert.equal(vi('2026-11-10', { status: 'pago' }), null);
+    assert.equal(vi('2026-11-10', { tipo: 'entrada' }), null);
+  });
+
+  test('conta dias pelo calendário, atravessando mês, ano e horário de verão', () => {
+    assert.equal(f.eval("daysBetween('2026-12-30', '2027-01-02')"), 3);
+    assert.equal(f.eval("daysBetween('2026-03-01', '2026-02-28')"), -1);
+    assert.equal(f.eval("daysBetween('2026-10-01', '2026-11-01')"), 31);
+  });
+
+  test('dayLabel: Hoje, Ontem, Amanhã, dia da semana; ano só se for outro ano', () => {
+    assert.equal(f.eval(`dayLabel('2026-11-22', '${HOJE}')`), 'Hoje, 22/11');
+    assert.equal(f.eval(`dayLabel('2026-11-21', '${HOJE}')`), 'Ontem, 21/11');
+    assert.equal(f.eval(`dayLabel('2026-11-23', '${HOJE}')`), 'Amanhã, 23/11');
+    assert.equal(f.eval(`dayLabel('2026-11-20', '${HOJE}')`), 'sexta-feira, 20/11');
+    assert.equal(f.eval(`dayLabel('2025-12-31', '${HOJE}')`), 'quarta-feira, 31/12/2025');
+  });
+
+  test('groupByDay junta linhas do mesmo dia e mantém a ordem', () => {
+    const rows = [{ id: 1, data: '2026-11-22' }, { id: 2, data: '2026-11-22' }, { id: 3, data: '2026-11-20' }];
+    const g = JSON.parse(f.eval(`JSON.stringify(groupByDay(${JSON.stringify(rows)}))`));
+    assert.deepEqual(g.map(x => [x.data, x.itens.map(i => i.id)]), [['2026-11-22', [1, 2]], ['2026-11-20', [3]]]);
+    assert.deepEqual(JSON.parse(f.eval('JSON.stringify(groupByDay([]))')), []);
+  });
+});
+
+describe('Alerta de vencimento — carga, bolinha do menu e aviso', () => {
+  const dados = { alertas: 3, dias: 7, itens: [], resumo: { vencidas: { qtd: 2, total: 150 }, hoje: { qtd: 1, total: 30 }, proximas: { qtd: 0, total: 0 } } };
+
+  test('Venc.load pede ao servidor com a data do aparelho e guarda o resultado', async () => {
+    const calls = [], g = loadFront(['js_core.html'], { api: (route, payload) => { calls.push([route, payload]); return dados; } });
+    await g.eval('Venc.load()');
+    assert.equal(calls[0][0], 'lancamentos.vencimentos');
+    assert.match(calls[0][1].hoje, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(g.eval('Venc.dados.alertas'), 3);
+  });
+
+  test('chamadas simultâneas dividem a mesma requisição', async () => {
+    const calls = [], g = loadFront(['js_core.html'], { api: route => { calls.push(route); return dados; } });
+    await g.eval('Promise.all([Venc.load(), Venc.load(), Venc.load()])');
+    assert.equal(calls.length, 1);
+  });
+
+  test('se o servidor falhar, o alerta fica de fora e nada quebra', async () => {
+    const g = loadFront(['js_core.html'], { api: () => { throw new Error('fora do ar'); } });
+    await g.eval('Venc.load()');
+    assert.equal(g.eval('Venc.dados'), null);
+  });
+
+  test('aviso ao abrir: texto com plural certo; vencidas em vermelho, só "hoje" em tom normal', () => {
+    const g = loadFront(['js_core.html']);
+    g.eval(`globalThis.__t = []; UI.toast = (m, e) => __t.push([m, !!e]); Venc.dados = ${JSON.stringify(dados)}; Venc.avisar();`);
+    assert.deepEqual(JSON.parse(g.eval('JSON.stringify(__t)')), [['Atenção: 2 contas vencidas e 1 vence hoje', true]]);
+    g.eval(`__t.length = 0; Venc.dados = ${JSON.stringify({ ...dados, resumo: { vencidas: { qtd: 0, total: 0 }, hoje: { qtd: 2, total: 5 }, proximas: { qtd: 0, total: 0 } } })}; Venc.avisar();`);
+    assert.deepEqual(JSON.parse(g.eval('JSON.stringify(__t)')), [['Atenção: 2 vencem hoje', false]]);
+    g.eval(`__t.length = 0; Venc.dados = ${JSON.stringify({ ...dados, resumo: { vencidas: { qtd: 0, total: 0 }, hoje: { qtd: 0, total: 0 }, proximas: { qtd: 3, total: 9 } } })}; Venc.avisar();`);
+    assert.equal(g.eval('__t.length'), 0); // só próximos dias: sem aviso ao abrir
+  });
+});

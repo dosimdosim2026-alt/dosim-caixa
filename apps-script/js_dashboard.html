@@ -26,11 +26,36 @@ function barChartSvg(serie, W) {
     }).join('') + '</svg>';
 }
 
+/** Card "Contas a pagar": vencidas, vencem hoje e próximos dias, com baixa em um toque (null se não há o que mostrar). */
+function vencCard(d) {
+  if (!d || !d.itens.length) return null;
+  const r = d.resumo, mostra = d.itens.slice(0, 5), hoje = today();
+  const chip = (k, cls, txt) => k.qtd ? `<i class="chip ${cls}">${txt(k.qtd)} · ${brl(k.total)}</i>` : '';
+  const linha = i => {
+    const vi = vencInfo(Object.assign({ tipo: 'saida', status: 'pendente' }, i), hoje);
+    return `<div class="vrow"><span class="grow"><b>${esc(i.descricao || catOf(i.categoria_id).nome)}</b>
+      <small>${vi ? `<i class="chip ${vi.cls}">${vi.texto}</i> ` : ''}${i.contato_nome ? esc(i.contato_nome) + ' · ' : ''}${fmtDateFull(i.data)}</small></span>
+      <b class="neg v">${brl(i.valor)}</b><button class="ib ok" data-baixa="${i.id}" aria-label="Dar baixa" title="Dar baixa">${ico('check')}</button></div>`;
+  };
+  const el = h(`<div class="card venc ${d.alertas ? 'alert' : ''}"><h3>${ico('alert')} Contas a pagar</h3>
+    <div class="vsum">${chip(r.vencidas, 'late', n => `${n} vencida${n > 1 ? 's' : ''}`)}${chip(r.hoje, 'today', n => `${n} vence${n > 1 ? 'm' : ''} hoje`)}${chip(r.proximas, 'soon', n => `${n} nos próximos ${d.dias} dias`)}</div>
+    ${mostra.map(linha).join('')}
+    <button class="btn vall" data-ver>${d.itens.length > mostra.length ? `Ver todas (${d.itens.length})` : 'Ver em Lançamentos'}</button></div>`);
+  el.onclick = e => {
+    const b = e.target.closest('[data-baixa]');
+    if (b) { const i = d.itens.find(x => x.id === b.dataset.baixa); if (i) Lanc.baixar(Object.assign({ tipo: 'saida' }, i)); return; }
+    if (e.target.closest('[data-ver]')) Lanc.verPendentes();
+  };
+  return el;
+}
+
 App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
   async render(v) {
     v.append(h(`<div class="head"><div><h1>Painel</h1><small>Resumo do fluxo de caixa</small></div></div>`));
+    const slot = h('<div></div>'); v.append(slot); // alerta de vencimento: vale para qualquer mês, fica acima do seletor
     v.append(monthBar(() => App.refresh()));
-    const d = await API.call('dashboard.summary', { mes: Store.mes });
+    const [d, venc] = await Promise.all([API.call('dashboard.summary', { mes: Store.mes }), Venc.load()]);
+    const vc = vencCard(venc); if (vc) slot.append(vc);
     const draw = wrap => { const W = Math.floor(wrap.clientWidth); if (W >= 120) wrap.innerHTML = barChartSvg(d.serie, W); };
     const maxCat = Math.max(1, ...d.porCategoria.map(c => c.total));
     const cats = d.porCategoria.length ? d.porCategoria.map(c =>

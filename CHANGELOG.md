@@ -3,6 +3,20 @@
 Regra: cada correção ou funcionalidade entra aqui **e** ganha teste (veja `TESTING.md`).
 Correções citam o ID do teste de regressão (`REG-nnn`) em `tests/regression/regression.test.js`.
 
+## [1.3.0] - 2026-11-22
+
+### Novidades
+- **Alerta de vencimento de despesas a pagar.** Em despesa pendente, a data do lançamento é o vencimento. O app avisa de 4 formas:
+  - **Painel:** card "Contas a pagar" no topo (vale para qualquer mês) com vencidas, vencem hoje e próximos 7 dias, total de cada grupo, as 5 mais urgentes e botão "Ver todas".
+  - **Menu:** bolinha vermelha em Lançamentos com a quantidade de contas vencidas + que vencem hoje.
+  - **Lista de Lançamentos:** etiqueta em cada despesa pendente ("Vencida há 3 dias", "Vence hoje", "Vence em 2 dias").
+  - **Ao abrir o app:** aviso interno (toast) quando há contas vencidas ou vencendo hoje.
+- **Dar baixa em um toque.** Botão ✓ nas linhas pendentes (lista e card do Painel). Abre uma confirmação interna com a **data do pagamento/recebimento** (já preenchida com hoje) e marca como realizado. A data do lançamento passa a ser a do pagamento, para o fluxo de caixa refletir quando o dinheiro saiu.
+- **Lista agrupada por dia**, com título "Hoje, 22/11", "Ontem, 21/11"… e o resultado do dia (só realizados) ao lado. A data sai de dentro de cada linha.
+- **Filtro "Só pendentes"** em Lançamentos. Nele, o resumo mostra A receber, A pagar e Saldo previsto, em ordem de vencimento (o mais atrasado primeiro).
+- **Carregamento** com bloco animado no lugar do texto "Carregando…" (respeita "reduzir movimento" do aparelho).
+- API: `lancamentos.vencimentos` (`hoje`, `dias` de 1 a 60, padrão 7), `lancamentos.baixar` (`id`, `data` opcional) e `status` em `lancamentos.list`.
+
 ## [1.2.0] - 2026-11-22
 
 ### Novidades
