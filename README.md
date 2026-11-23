@@ -90,6 +90,16 @@ Depois, em **Actions**, rode de novo o workflow (*Re-run all jobs*) se o primeir
 | Logo/ícones | troque `assets/logo-dosim.png` → `pip install pillow` → `npm run icons` |
 | Qualquer correção ou novidade | teste + `CHANGELOG.md` (veja `TESTING.md`) |
 
+## Contas a pagar, vencimentos e parcelas
+- O **Painel** mostra as contas em aberto de todos os meses (vencidas em vermelho). Toque em **Pagar** para dar baixa; toque na conta para editar.
+- Em um lançamento **Pendente** aparece o campo **Vencimento**. O mês de caixa (lista, totais e gráfico) segue o vencimento; sem vencimento vale a data do lançamento.
+- **Parcelar**: informe o valor total, o nº de parcelas e o vencimento da 1ª. As demais vencem no mesmo dia dos meses seguintes. Cada parcela é um lançamento pendente; dê baixa em cada uma quando pagar.
+
+## Fechamento de caixa (dia, mês e ano)
+- O **realizado** conta na **data do pagamento**: o dia em que o dinheiro saiu da conta (ou entrou). Ao dar baixa você informa essa data e a forma usada.
+- O **pendente** conta no **vencimento** (é previsão e aparece em "A pagar / A receber").
+- No Painel, escolha **Dia / Mês / Ano**. Dia lista o que foi pago e recebido; Ano traz a tabela mês a mês.
+
 ## Roteiro de teste manual (o que os testes automáticos não veem)
 1. Instalou com o ícone da DoSim? Abre em **tela cheia**, sem barra do navegador?
 2. Barra de status e splash na cor da marca (`#9E4563`)? No iPhone, faixas do topo/rodapé coloridas?

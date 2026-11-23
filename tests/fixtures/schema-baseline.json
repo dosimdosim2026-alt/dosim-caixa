@@ -1,6 +1,6 @@
 {
   "comentario": "Colunas que JÁ existem em planilhas em uso. Só podem crescer no fim. Atualize este arquivo ao publicar uma versão com novas colunas.",
-  "versao": "1.0.0",
+  "versao": "1.3.0",
   "schemas": {
     "categorias": [
       "id",
@@ -22,7 +22,12 @@
       "forma",
       "item_id",
       "contato_id",
-      "contato_nome"
+      "contato_nome",
+      "vencimento",
+      "parcela",
+      "parcelas",
+      "grupo_id",
+      "data_pagamento"
     ],
     "catalogo": [
       "id",

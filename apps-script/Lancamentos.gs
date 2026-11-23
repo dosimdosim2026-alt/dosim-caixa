@@ -1,10 +1,13 @@
-/** Painel de lançamentos (receitas e despesas). */
+/** Painel de lançamentos (receitas e despesas), vencimentos e parcelamento. */
 const FORMAS_ = ['pix', 'dinheiro', 'credito', 'debito', 'transferencia'];
+const MAX_PARCELAS_ = 60;
 
 function validarLancamento_(p) {
   const valor = Number(p.valor);
   if (!(valor > 0)) throw new Error('Informe um valor maior que zero.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.data)) throw new Error('Informe uma data válida.');
+  if (!dataValida_(p.data)) throw new Error('Informe uma data válida.');
+  if (p.vencimento && !dataValida_(p.vencimento)) throw new Error('Informe um vencimento válido.');
+  if (p.data_pagamento && !dataValida_(p.data_pagamento)) throw new Error('Informe uma data de pagamento válida.');
   if (['entrada', 'saida'].indexOf(p.tipo) < 0) throw new Error('Tipo inválido.');
   const cat = Db.list('categorias').filter(function (c) { return c.id === p.categoria_id; })[0];
   if (!cat || cat.tipo !== p.tipo) throw new Error('Selecione uma categoria do mesmo tipo.');
@@ -15,7 +18,10 @@ function validarLancamento_(p) {
     status: p.status === 'pendente' ? 'pendente' : 'pago',
     forma: FORMAS_.indexOf(p.forma) > -1 ? p.forma : '',
     item_id: String(p.item_id || ''),
-    contato_id: '', contato_nome: ''
+    contato_id: '', contato_nome: '',
+    vencimento: p.vencimento ? String(p.vencimento) : '',
+    parcela: '', parcelas: '', grupo_id: '',
+    data_pagamento: p.data_pagamento ? String(p.data_pagamento) : ''
   };
 }
 
@@ -26,76 +32,39 @@ function exigirContato_(d, nome) {
     throw new Error(d.tipo === 'entrada' ? 'Informe o cliente deste lançamento.' : 'Informe o fornecedor deste lançamento.');
 }
 
-/** Data do filtro de período: vazia = sem limite; formato diferente de aaaa-mm-dd é recusado. */
-function dataFiltro_(v, qual) {
-  if (v === undefined || v === null || v === '') return '';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v))) throw new Error('Data ' + qual + ' inválida.');
-  return String(v);
-}
-
-/** Hoje (aaaa-mm-dd) no fuso do projeto — usado quando o app não informa a data do aparelho. */
-function hojeServidor_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
-
-/** Dias de a até b (aaaa-mm-dd), contando só o calendário: negativo = b é anterior a a. */
-function diasEntre_(a, b) {
-  const x = String(a).split('-').map(Number), y = String(b).split('-').map(Number);
-  return Math.round((Date.UTC(y[0], y[1] - 1, y[2]) - Date.UTC(x[0], x[1] - 1, x[2])) / 86400000);
-}
-
-function somarDias_(data, n) {
-  const x = String(data).split('-').map(Number), d = new Date(Date.UTC(x[0], x[1] - 1, x[2] + n));
-  return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
-}
-
 function lancamentosRoutes_() {
   const crud = makeCrud_('lancamentos', {
     validate: validarLancamento_,
+    // O mês segue a data de caixa (vencimento, se houver): cada parcela aparece no mês em que vence.
     filter: function (rows, p) {
-      // Período: "mes" (aaaa-mm) ou intervalo "de"/"ate" (aaaa-mm-dd, inclusive nas duas pontas).
-      const de = dataFiltro_(p.de, 'inicial do período'), ate = dataFiltro_(p.ate, 'final do período');
-      if (de && ate && de > ate) throw new Error('A data inicial não pode ser maior que a final.');
       return rows.filter(function (r) {
-        const d = String(r.data);
-        return (!p.mes || d.indexOf(p.mes) === 0) && (!de || d >= de) && (!ate || d <= ate) && (!p.tipo || r.tipo === p.tipo) && (!p.status || r.status === p.status);
+        return (!p.mes || String(dataCaixa_(r)).indexOf(p.mes) === 0) && (!p.tipo || r.tipo === p.tipo) && (!p.status || r.status === p.status);
       });
     },
-    sort: function (a, b) { return String(b.data).localeCompare(String(a.data)); }
+    sort: function (a, b) { return String(dataCaixa_(b)).localeCompare(String(dataCaixa_(a))); }
   });
   const routes = crudRoutes_('lancamentos', crud);
 
-  /**
-   * Alerta de vencimento: despesas a pagar (saída + pendente). A "data" do lançamento pendente é o vencimento.
-   * Devolve as vencidas, as que vencem hoje e as dos próximos "dias" (padrão 7), da mais atrasada para a mais distante.
-   * O app envia "hoje" (data do aparelho); sem ele vale a data do servidor.
-   */
-  routes['lancamentos.vencimentos'] = function (p) {
-    const ref = dataFiltro_(p.hoje, 'de hoje') || hojeServidor_();
-    const dias = Math.min(60, Math.max(1, Math.floor(Number(p.dias)) || 7));
-    const limite = somarDias_(ref, dias);
-    const resumo = { vencidas: { qtd: 0, total: 0 }, hoje: { qtd: 0, total: 0 }, proximas: { qtd: 0, total: 0 } };
-    const itens = Db.list('lancamentos')
-      .filter(function (r) { return r.tipo === 'saida' && r.status === 'pendente' && String(r.data) <= limite; })
-      .sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); })
-      .map(function (r) {
-        const n = diasEntre_(ref, r.data), sit = n < 0 ? 'vencida' : n === 0 ? 'hoje' : 'proxima', k = sit === 'proxima' ? 'proximas' : sit === 'hoje' ? 'hoje' : 'vencidas';
-        resumo[k].qtd++; resumo[k].total = Math.round((resumo[k].total + Number(r.valor)) * 100) / 100;
-        return { id: r.id, data: r.data, descricao: r.descricao, valor: Number(r.valor), contato_nome: r.contato_nome, categoria_id: r.categoria_id, dias: n, situacao: sit };
-      });
-    return { ref: ref, dias: dias, itens: itens, resumo: resumo, alertas: resumo.vencidas.qtd + resumo.hoje.qtd };
+  routes['lancamentos.list'] = function (p) {
+    const rows = crud.list(p);
+    if (p.ordem === 'asc') rows.sort(function (a, b) { return String(dataCaixa_(a)).localeCompare(String(dataCaixa_(b))); });
+    return rows;
   };
 
-  /** Dar baixa: marca o lançamento pendente como realizado; "data" (opcional) vira a data do pagamento/recebimento. */
-  routes['lancamentos.baixar'] = function (p) {
-    const l = Db.list('lancamentos').filter(function (r) { return r.id === p.id; })[0];
-    if (!l) throw new Error('Lançamento não encontrado.');
-    if (l.status !== 'pendente') throw new Error('Este lançamento já está realizado.');
-    return Db.update('lancamentos', l.id, { status: 'pago', data: dataFiltro_(p.data, 'do pagamento') || l.data });
-  };
-
-  // Salvar: valida tudo primeiro; só depois grava contato/item novos (se pedido) e o lançamento.
+  // Salvar: valida tudo primeiro; só depois grava contato/item novos (se pedido) e o lançamento (ou as parcelas).
   routes['lancamentos.save'] = function (p) {
     const d = validarLancamento_(p);
     const papel = d.tipo === 'entrada' ? 'cliente' : 'fornecedor';
+    const parcelar = !p.id && p.parcelado === true;
+    let n = 0;
+    if (parcelar) {
+      n = Number(p.parcelas);
+      if (!(Number.isInteger(n) && n >= 2 && n <= MAX_PARCELAS_)) throw new Error('Informe de 2 a ' + MAX_PARCELAS_ + ' parcelas.');
+      if (!d.vencimento) throw new Error('Informe o vencimento da 1ª parcela.');
+      d.status = 'pendente';                                   // parcelas são contas em aberto (a 1ª pode nascer paga)
+    }
+    const atual = p.id ? Db.list('lancamentos').filter(function (r) { return r.id === p.id; })[0] : null;
+    if (p.id && !atual) throw new Error('Registro não encontrado.');
 
     // --- contato (cliente nas entradas, fornecedor nas saídas) ---
     let contato = p.contato_id ? Db.list('contatos').filter(function (c) { return c.id === p.contato_id; })[0] : null;
@@ -126,7 +95,47 @@ function lancamentosRoutes_() {
       });
       d.item_id = item.id;
     }
-    return d.id ? Db.update('lancamentos', d.id, d) : Db.insert('lancamentos', d);
+
+    if (parcelar) {                                            // compra/venda parcelada: gera todas as parcelas de uma vez
+      const valores = splitParcelas_(d.valor, n), grupo = Utilities.getUuid();
+      return Db.insertMany('lancamentos', valores.map(function (v, i) {
+        return Object.assign({}, d, {
+          valor: v, vencimento: addMeses_(d.vencimento, i), parcela: i + 1, parcelas: n, grupo_id: grupo,
+          status: (i === 0 && p.primeira_paga === true) ? 'pago' : 'pendente',
+          data_pagamento: (i === 0 && p.primeira_paga === true) ? (d.data_pagamento || d.data) : ''
+        });
+      }));
+    }
+    // data do pagamento: só existe para lançamento realizado; sem ela, vale a data do lançamento (ou a já gravada)
+    if (d.status !== 'pago') d.data_pagamento = '';
+    else if (!d.data_pagamento) d.data_pagamento = (atual && atual.status === 'pago' && atual.data_pagamento) || d.data;
+    if (atual) {                                               // editar uma parcela não muda a que grupo ela pertence
+      d.parcela = atual.parcela; d.parcelas = atual.parcelas; d.grupo_id = atual.grupo_id;
+      return Db.update('lancamentos', d.id, d);
+    }
+    return Db.insert('lancamentos', d);
+  };
+
+  // Dar baixa (marcar como pago/recebido): grava a DATA DO PAGAMENTO (padrão: hoje) e, se informada, a forma usada
+  routes['lancamentos.baixa'] = function (p) {
+    const atual = Db.list('lancamentos').filter(function (r) { return r.id === p.id; })[0];
+    if (!atual) throw new Error('Registro não encontrado.');
+    if (p.data_pagamento && !dataValida_(p.data_pagamento)) throw new Error('Informe uma data de pagamento válida.');
+    const patch = { status: 'pago' };
+    if (p.data_pagamento) patch.data_pagamento = p.data_pagamento;
+    else if (atual.status !== 'pago' || !ISO_.test(String(atual.data_pagamento || ''))) patch.data_pagamento = dataValida_(p.hoje) ? p.hoje : hojeISO_();
+    if (FORMAS_.indexOf(p.forma) > -1) patch.forma = p.forma;
+    return Db.update('lancamentos', p.id, patch);
+  };
+
+  // Excluir um parcelamento inteiro (por padrão só as parcelas ainda pendentes; todas:true apaga também as pagas)
+  routes['lancamentos.remove_grupo'] = function (p) {
+    const g = String(p.grupo_id || '');
+    if (!g) throw new Error('Parcelamento não informado.');
+    const grupo = Db.list('lancamentos').filter(function (r) { return r.grupo_id === g; });
+    if (!grupo.length) throw new Error('Parcelamento não encontrado.');
+    const alvo = grupo.filter(function (r) { return p.todas === true || r.status === 'pendente'; });
+    return { removidas: Db.removeMany('lancamentos', alvo.map(function (r) { return r.id; })) };
   };
   return routes;
 }

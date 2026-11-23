@@ -27,6 +27,7 @@ class Range {
     return out;
   }
   setValues(vals) {
+    if (this.r + vals.length - 1 > this.sh.maxRows) throw new Error('The coordinates of the range are outside the dimensions of the sheet.');   // como o Sheets real
     for (let i = 0; i < vals.length; i++) for (let j = 0; j < vals[i].length; j++) this.sh._set(this.r + i, this.c + j, vals[i][j]);
     return this;
   }
@@ -36,7 +37,7 @@ class Range {
 }
 
 class Sheet {
-  constructor(name, env) { this.name = name; this.env = env; this.rows = []; this.textCols = new Set(); }
+  constructor(name, env) { this.name = name; this.env = env; this.rows = []; this.textCols = new Set(); this.maxRows = 1000; }
   _cell(r, c) { return (this.rows[r - 1] || [])[c - 1]; }
   _convert(v, c) {                                   // comportamento do Sheets em colunas sem formato de texto
     if (typeof v !== 'string' || this.textCols.has(c)) return v;
@@ -54,7 +55,8 @@ class Sheet {
   getRange(r, c, nr = 1, nc = 1) { return new Range(this, r, c, nr, nc); }
   getLastRow() { for (let i = this.rows.length; i > 0; i--) if (this.rows[i - 1].some(v => v !== '' && v !== undefined)) return i; return 0; }
   getLastColumn() { let m = 0; this.rows.forEach(row => row.forEach((v, j) => { if (v !== '' && v !== undefined) m = Math.max(m, j + 1); })); return m; }
-  getMaxRows() { return 1000; }
+  getMaxRows() { return this.maxRows; }
+  insertRowsAfter(_pos, n) { this.maxRows += n; }
   getMaxColumns() { return 26; }
   appendRow(arr) { const r = this.getLastRow() + 1; arr.forEach((v, j) => this._set(r, j + 1, v)); }
   deleteRow(r) { this.rows.splice(r - 1, 1); }

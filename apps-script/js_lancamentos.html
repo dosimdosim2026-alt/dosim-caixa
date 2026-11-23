@@ -1,65 +1,28 @@
 <script>
 const Lanc = {
-  tipo: '', status: '', // status: '' (todos) | 'pendente'
-  /* Período da lista: 'dia' | 'semana' | 'mes' (usa o mês do seletor do app) | 'custom' (De/Até) */
-  periodo: 'mes', ref: today(), de: today().slice(0, 7) + '-01', ate: today(), _p: 'mes',
-  /** Intervalo {de, ate} do modo informado. */
-  intervalo(modo) {
-    return modo === 'custom' ? { de: this.de, ate: this.ate } : periodRange(modo, modo === 'mes' ? Store.mes + '-01' : this.ref);
-  },
-  /** Barra do período: ‹ › no dia/semana, duas datas em "Período"; o mês usa o seletor do app. */
-  periodBar() {
-    if (this.periodo === 'mes') return monthBar(() => App.refresh());
-    if (this.periodo === 'custom') {
-      const el = h(`<div class="two pbar"><label>De<input id="p-de" type="date"></label><label>Até<input id="p-ate" type="date"></label></div>`);
-      const de = $('#p-de', el), ate = $('#p-ate', el); de.value = this.de; ate.value = this.ate;
-      el.onchange = e => {
-        if (!de.value || !ate.value) { UI.toast('Informe a data inicial e a final.', true); de.value = this.de; ate.value = this.ate; return; }
-        // data inicial depois da final: a outra ponta acompanha a que acabou de mudar
-        if (de.value > ate.value) { if (e.target === de) ate.value = de.value; else de.value = ate.value; }
-        this.de = de.value; this.ate = ate.value; App.refresh();
-      };
-      return el;
-    }
-    const r = this.intervalo(this.periodo), dia = this.periodo === 'dia';
-    const label = dia ? parseDay(r.de).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
-      : `${fmtDate(r.de)} – ${fmtDateFull(r.ate)}`;
-    const el = h(`<div class="mbar"><button class="ib" data-d="-1" aria-label="${dia ? 'Dia anterior' : 'Semana anterior'}">‹</button><span>${label}</span><button class="ib" data-d="1" aria-label="${dia ? 'Próximo dia' : 'Próxima semana'}">›</button></div>`);
-    el.onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; this.ref = addDays(this.ref, Number(b.dataset.d) * (dia ? 1 : 7)); App.refresh(); };
-    return el;
-  },
-  /** Dar baixa em um pendente: confirma a data do pagamento (ou recebimento) e marca como realizado. */
-  baixar(l) {
-    const ent = l.tipo === 'entrada', acao = ent ? 'recebimento' : 'pagamento';
-    UI.modal(ent ? 'Confirmar recebimento' : 'Confirmar pagamento',
-      `<p class="muted" style="margin-bottom:14px">${esc(l.descricao || catOf(l.categoria_id).nome)} · <b>${brl(l.valor)}</b><br>Vencimento: ${fmtDateFull(l.data)}</p>
-       <label>Data do ${acao}<input id="b-data" type="date"></label>
-       <div class="row end"><button class="btn" data-n>Cancelar</button><button class="btn primary" data-ok>Confirmar ${acao}</button></div>`,
-      (box, close) => {
-        $('#b-data', box).value = today();
-        box.onclick = e => {
-          if (e.target.closest('[data-n]')) close();
-          const ok = e.target.closest('[data-ok]');
-          if (ok) UI.busy(ok, async () => {
-            await API.call('lancamentos.baixar', { id: l.id, data: $('#b-data', box).value });
-            close(); UI.toast(ent ? 'Recebimento confirmado' : 'Pagamento confirmado'); Venc.load(); App.refresh();
-          });
-        };
+  tipo: '', situacao: '',
+  /** Dar baixa: pergunta a data do pagamento (dia em que o dinheiro saiu/entrou) e a forma usada. */
+  baixa(item) {
+    const pagar = item.tipo === 'saida';
+    UI.modal(pagar ? 'Pagar conta' : 'Receber', baixaHtml(item, today()), (box, close) => {
+      box.addEventListener('click', e => {
+        const b = e.target.closest('[data-confirm]'); if (!b) return;
+        UI.busy(b, async () => {
+          const data = $('#b-data', box).value;
+          if (!data) throw new Error('Informe a data do ' + (pagar ? 'pagamento.' : 'recebimento.'));
+          await API.call('lancamentos.baixa', { id: item.id, data_pagamento: data, forma: $('#b-forma', box).value, hoje: today() });
+          close(); UI.toast(pagar ? 'Pagamento registrado' : 'Recebimento registrado'); App.refresh();
+        });
       });
-  },
-  /** Atalho do alerta: abre as pendências a pagar, da mais atrasada até o fim da janela de aviso. */
-  verPendentes() {
-    const it = (Venc.dados && Venc.dados.itens) || [], t = today();
-    this.status = 'pendente'; this.tipo = 'saida'; this.periodo = 'custom';
-    this.de = it.length && it[0].data < t ? it[0].data : t; this.ate = addDays(t, (Venc.dados && Venc.dados.dias) || 7);
-    App.go('lancamentos');
+    });
   },
   form(item) {
-    const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '' }, item || {});
-    const original = s.descricao, originalContato = s.contato_nome, OUTRO = '__outro';
+    const s = Object.assign({ tipo: 'saida', data: today(), status: 'pago', valor: '', descricao: '', categoria_id: '', forma: 'pix', item_id: '', contato_id: '', contato_nome: '',
+      vencimento: '', data_pagamento: '', parcelado: false, nparc: 3, primeira_paga: false }, item || {});
+    const original = s.descricao, originalContato = s.contato_nome, originalStatus = s.status, OUTRO = '__outro';
     const regra = Store.config.contato_regra || 'opcional';
     const papel = () => s.tipo === 'entrada' ? 'cliente' : 'fornecedor';
-    const exigido = () => regra === 'sempre' || (regra === 'pendente' && s.status === 'pendente');
+    const exigido = () => regra === 'sempre' || (regra === 'pendente' && (s.status === 'pendente' || s.parcelado));
     const itens = () => Store.catalogo.filter(i => i.tipo === s.tipo && (i.ativo || i.id === s.item_id));
     const contatos = () => Store.contatos.filter(c => c[papel()] && (c.ativo || c.id === s.contato_id));
     // Ao editar: reencontra item e contato (por id ou, em registros antigos, pelo nome)
@@ -68,21 +31,35 @@ const Lanc = {
     let sel = s.item_id || (s.descricao ? OUTRO : (itens().length ? '' : OUTRO)), csel = s.contato_id || (s.contato_nome ? OUTRO : ''), lastAuto = '';
 
     const formaOpts = FORMAS.map(f => `<option value="${f[0]}">${f[1]}</option>`).join('') + (s.id && !s.forma ? '<option value="">Não informado</option>' : '');
+    const nparcOpts = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 18, 24, 36, 48, 60].map(n => `<option value="${n}">${n}x</option>`).join('');
+    const ehParcela = !!(s.id && s.parcelas);
     const body = `
+      ${ehParcela ? `<p class="muted" style="margin:-4px 0 12px">Parcela ${s.parcela} de ${s.parcelas} · editar altera só esta parcela.</p>` : ''}
       <div class="seg" data-f="tipo"><button data-v="entrada">Entrada</button><button data-v="saida">Saída</button></div>
-      <label>Valor<input id="f-valor" inputmode="numeric" data-money placeholder="R$ 0,00" autocomplete="off"></label>
+      <label><span id="f-valor-l">Valor</span><input id="f-valor" inputmode="numeric" data-money placeholder="R$ 0,00" autocomplete="off"></label>
       <label><span id="f-item-l"></span><select id="f-item"></select></label>
       <label id="f-man-w" hidden><span id="f-desc-l">Descrição</span><input id="f-desc" maxlength="200" autocomplete="off"></label>
       <label><span id="f-cont-l"></span><select id="f-cont"></select></label>
       <label id="f-cman-w" hidden><span id="f-cnome-l"></span><input id="f-cnome" maxlength="80" autocomplete="off"></label>
-      <div class="two"><label>Data<input id="f-data" type="date"></label><label>Categoria<select id="f-cat"></select></label></div>
+      <div class="two"><label>Data do lançamento<input id="f-data" type="date"></label><label>Categoria<select id="f-cat"></select></label></div>
+      <label id="f-venc-w" hidden><span id="f-venc-l">Vencimento</span><input id="f-venc" type="date"></label>
+      <label id="f-pgto-w" hidden><span id="f-pgto-l">Data do pagamento</span><input id="f-pgto" type="date"></label>
+      ${s.id ? '' : `<label class="chk"><input type="checkbox" id="f-parcelado"> Parcelar (gera as parcelas automaticamente)</label>
+      <div id="f-parc-box" hidden>
+        <label>Número de parcelas<select id="f-nparc">${nparcOpts}</select></label>
+        <label class="chk"><input type="checkbox" id="f-primpaga"> A 1ª parcela já foi paga (entrada)</label>
+        <p class="muted" id="f-parc-prev" style="margin:-4px 0 14px;font-size:13px"></p>
+      </div>`}
       <label><span id="f-forma-l"></span><select id="f-forma">${formaOpts}</select></label>
-      <div class="seg" data-f="status"><button data-v="pago">Realizado</button><button data-v="pendente">Pendente</button></div>
-      <div class="row end">${s.id ? '<button class="btn danger" data-del>Excluir</button>' : ''}<button class="btn primary" data-save>Salvar lançamento</button></div>`;
+      <div class="seg" id="f-status-w" data-f="status"><button data-v="pago">Realizado</button><button data-v="pendente">Pendente</button></div>
+      <div class="row end" style="flex-wrap:wrap">${s.id ? '<button class="btn danger" data-del>Excluir' + (ehParcela ? ' esta parcela' : '') + '</button>' : ''}${ehParcela && s.grupo_id ? '<button class="btn danger" data-delgrp>Excluir parcelas pendentes</button>' : ''}<button class="btn primary" data-save>Salvar lançamento</button></div>`;
 
     UI.modal(s.id ? 'Editar lançamento' : 'Novo lançamento', body, (box, close) => {
       const el = id => $('#' + id, box), ent = () => s.tipo === 'entrada';
       el('f-valor').value = moneyFmt(s.valor); el('f-data').value = s.data; el('f-desc').value = s.descricao; el('f-cnome').value = s.contato_nome; el('f-forma').value = s.forma;
+      el('f-venc').value = s.vencimento || ''; el('f-pgto').value = s.data_pagamento || ''; el('f-pgto').max = today();
+      let pgtoManual = !!s.data_pagamento || !!(s.id && originalStatus === 'pendente');   // 1ª vez: acompanha a data do lançamento
+      if (el('f-nparc')) el('f-nparc').value = String(s.nparc);
 
       const fillCats = () => {
         const opts = Store.categorias.filter(c => c.tipo === s.tipo && (c.ativo || c.id === s.categoria_id));
@@ -109,15 +86,51 @@ const Lanc = {
         el('f-forma-l').textContent = ent() ? 'Forma de recebimento' : 'Forma de pagamento';
       };
 
-      bindSeg(box, s, f => {
+      // Vencimento (pendentes e parcelas) e parcelamento: mostra/oculta e calcula a prévia das parcelas
+      let repaintSeg = () => {};
+      const parcelas = () => {
+        const on = !!s.parcelado;
+        if (el('f-parc-box')) el('f-parc-box').hidden = !on;
+        el('f-valor-l').textContent = on ? (ent() ? 'Valor total da venda' : 'Valor total da compra') : 'Valor';
+        el('f-status-w').hidden = on;
+        if (on && s.status !== 'pendente') { s.status = 'pendente'; repaintSeg(); }
+        const mostraVenc = on || s.status === 'pendente';
+        el('f-venc-w').hidden = !mostraVenc;
+        el('f-venc-l').textContent = on ? 'Vencimento da 1ª parcela' : 'Vencimento';
+        if (mostraVenc && !el('f-venc').value) el('f-venc').value = el('f-data').value;
+        // Data do pagamento: só para o que já foi pago (ou a 1ª parcela paga na hora)
+        const mostraPgto = (s.status === 'pago' && !on) || (on && s.primeira_paga);
+        el('f-pgto-w').hidden = !mostraPgto;
+        el('f-pgto-l').textContent = (ent() ? 'Data do recebimento' : 'Data do pagamento') + (on ? ' da 1ª parcela' : '');
+        if (mostraPgto && !el('f-pgto').value) el('f-pgto').value = (s.id && originalStatus === 'pendente') ? today() : el('f-data').value;
+        if (!el('f-parc-prev')) return;
+        const total = parseMoney(el('f-valor').value), n = +el('f-nparc').value, v1 = el('f-venc').value;
+        if (!on) { el('f-parc-prev').textContent = ''; return; }
+        if (!(total > 0) || !v1) { el('f-parc-prev').textContent = 'Informe o valor total e o vencimento da 1ª parcela para ver as parcelas.'; return; }
+        const ps = splitParcelas(total, n);
+        el('f-parc-prev').textContent = (ps[0] === ps[n - 1] ? `${n}x de ${brl(ps[0])}` : `${n - 1}x de ${brl(ps[0])} + 1x de ${brl(ps[n - 1])}`)
+          + ` · 1ª em ${fmtDMA(v1)} · última em ${fmtDMA(addMonthsISO(v1, n - 1))}`;
+      };
+
+      repaintSeg = bindSeg(box, s, f => {
         if (f === 'tipo') {
           s.item_id = ''; el('f-desc').value = ''; sel = itens().length ? '' : OUTRO; lastAuto = '';
           s.contato_id = ''; csel = ''; el('f-cnome').value = '';
           fillItens(); fillCats();
         }
-        labels(); fillContatos(); // o status "pendente" pode tornar o contato obrigatório
+        labels(); fillContatos(); parcelas(); // o status "pendente" pode tornar o contato obrigatório e pedir vencimento
       });
-      labels(); fillItens(); fillCats(); fillContatos();
+      labels(); fillItens(); fillCats(); fillContatos(); parcelas();
+
+      if (el('f-parcelado')) {
+        el('f-parcelado').onchange = () => { s.parcelado = el('f-parcelado').checked; labels(); fillContatos(); parcelas(); };
+        el('f-primpaga').onchange = () => { s.primeira_paga = el('f-primpaga').checked; parcelas(); };
+      }
+      ['input', 'change'].forEach(t => box.addEventListener(t, e => {
+        if (['f-valor', 'f-venc', 'f-nparc'].includes(e.target.id)) parcelas();
+        if (e.target.id === 'f-pgto') pgtoManual = true;
+        if (e.target.id === 'f-data' && !pgtoManual && !el('f-pgto-w').hidden) el('f-pgto').value = el('f-data').value;
+      }));
 
       el('f-item').onchange = () => {
         sel = el('f-item').value; el('f-man-w').hidden = sel !== OUTRO;
@@ -126,7 +139,7 @@ const Lanc = {
         if (!it) return;
         if (it.categoria_id && Store.categorias.some(c => c.id === it.categoria_id && c.tipo === s.tipo && c.ativo)) { s.categoria_id = it.categoria_id; fillCats(); }
         const v = el('f-valor');
-        if (it.preco !== '' && (v.value === '' || v.value === lastAuto)) { lastAuto = moneyFmt(it.preco); v.value = lastAuto; }
+        if (it.preco !== '' && (v.value === '' || v.value === lastAuto)) { lastAuto = moneyFmt(it.preco); v.value = lastAuto; parcelas(); }
       };
       el('f-cont').onchange = () => {
         csel = el('f-cont').value; el('f-cman-w').hidden = csel !== OUTRO;
@@ -135,7 +148,7 @@ const Lanc = {
       };
 
       box.addEventListener('click', async e => {
-        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]');
+        const save = e.target.closest('[data-save]'), del = e.target.closest('[data-del]'), delgrp = e.target.closest('[data-delgrp]');
         if (save) UI.busy(save, async () => {
           // --- item / descrição ---
           let descricao = '', item_id = '', salvar = false;
@@ -177,15 +190,24 @@ const Lanc = {
           }
           if (exigido() && !contato_nome) throw new Error(`Informe o ${pp} (regra definida em Ajustes).`);
 
+          // --- vencimento / parcelas ---
+          const venc = !el('f-venc-w').hidden ? el('f-venc').value : (s.vencimento || '');
+          if (s.parcelado && !venc) throw new Error('Informe o vencimento da 1ª parcela.');
+          const n = s.parcelado ? +el('f-nparc').value : 0;
+
           await API.call('lancamentos.save', { id: s.id, tipo: s.tipo, status: s.status, valor: parseMoney(el('f-valor').value),
             descricao, item_id, salvar_catalogo: salvar, contato_id, contato_nome, salvar_contato: salvarC,
-            data: el('f-data').value, categoria_id: el('f-cat').value, forma: el('f-forma').value });
+            data: el('f-data').value, vencimento: venc, data_pagamento: !el('f-pgto-w').hidden ? el('f-pgto').value : '', categoria_id: el('f-cat').value, forma: el('f-forma').value,
+            parcelado: !!s.parcelado, parcelas: n, primeira_paga: !!s.primeira_paga });
           if (salvar) Store.catalogo = await API.call('catalogo.list');
           if (salvarC) Store.contatos = await API.call('contatos.list');
-          close(); UI.toast('Lançamento salvo' + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); Venc.load(); App.refresh();
+          close(); UI.toast((s.parcelado ? `${n} parcelas lançadas` : 'Lançamento salvo') + (salvar ? ' · item no catálogo' : '') + (salvarC ? ' · contato salvo' : '')); App.refresh();
         });
-        if (del && await UI.confirm('Excluir este lançamento?')) UI.busy(del, async () => {
-          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast('Lançamento excluído'); Venc.load(); App.refresh();
+        if (del && await UI.confirm(ehParcela ? 'Excluir somente esta parcela?' : 'Excluir este lançamento?')) UI.busy(del, async () => {
+          await API.call('lancamentos.remove', { id: s.id }); close(); UI.toast(ehParcela ? 'Parcela excluída' : 'Lançamento excluído'); App.refresh();
+        });
+        if (delgrp && await UI.confirm('Excluir todas as parcelas ainda pendentes deste parcelamento? As parcelas já pagas continuam no histórico.')) UI.busy(delgrp, async () => {
+          const r = await API.call('lancamentos.remove_grupo', { grupo_id: s.grupo_id }); close(); UI.toast(`${r.removidas} parcela(s) excluída(s)`); App.refresh();
         });
       });
     });
@@ -194,53 +216,25 @@ const Lanc = {
 
 App.register({ id: 'lancamentos', label: 'Lançamentos', icon: 'list', order: 20,
   async render(v) {
-    v.append(h(`<div class="head"><div><h1>Lançamentos</h1><small>Entradas e saídas do período</small></div></div>`));
-    Lanc._p = Lanc.periodo;
-    v.append(h(`<div class="seg" data-f="periodo"><button data-v="dia">Dia</button><button data-v="semana">Semana</button><button data-v="mes">Mês</button><button data-v="custom">Período</button></div>`));
-    v.append(Lanc.periodBar());
+    const soPend = Lanc.situacao === 'pendente';
+    v.append(h(`<div class="head"><div><h1>Lançamentos</h1><small>${soPend ? 'Contas em aberto, do vencimento mais próximo ao mais distante' : 'Entradas e saídas do período'}</small></div></div>`));
+    if (!soPend) v.append(monthBar(() => App.refresh()));
     v.append(h(`<div class="seg" data-f="tipo"><button data-v="">Todos</button><button data-v="entrada">Entradas</button><button data-v="saida">Saídas</button></div>`));
-    v.append(h(`<div class="seg" data-f="status"><button data-v="">Todos os status</button><button data-v="pendente">Só pendentes</button></div>`));
-    bindSeg(v, Lanc, f => {
-      if (f === 'periodo') { // ao trocar de atalho, mantém o dia/mês que o usuário estava olhando (hoje, se estiver dentro dele)
-        const ant = Lanc._p, nov = Lanc.periodo, r = Lanc.intervalo(ant), t = today();
-        const base = ant === nov || (r.de <= t && t <= r.ate) ? t : r.de; // tocar de novo no mesmo atalho volta para hoje
-        if (nov === 'mes') Store.mes = base.slice(0, 7);
-        else if (nov !== 'custom') Lanc.ref = base;
-        else if (ant !== 'custom') { Lanc.de = r.de; Lanc.ate = r.ate; }
-      }
-      App.refresh();
-    });
-    const r = Lanc.intervalo(Lanc.periodo);
-    const pend = Lanc.status === 'pendente', hoje = today();
-    const q = Lanc.periodo === 'mes' ? { mes: Store.mes } : { de: r.de, ate: r.ate };
-    const rows = await API.call('lancamentos.list', Object.assign(q, { tipo: Lanc.tipo, status: Lanc.status }));
-    if (pend) rows.reverse(); // só pendentes: do vencimento mais próximo (ou mais atrasado) para o mais distante
-    // Totais do período: só lançamentos realizados (igual ao Painel). Em "Só pendentes": a receber, a pagar e saldo previsto.
-    const conta = l => pend || l.status !== 'pendente', base = rows.filter(conta);
-    const soma = t => base.filter(l => l.tipo === t).reduce((s, l) => s + Number(l.valor), 0);
-    const ent = soma('entrada'), sai = soma('saida'), saldo = Math.round((ent - sai) * 100) / 100, nPend = rows.length - base.length;
-    v.append(h(`<div class="psum"><div><small>${pend ? 'A receber' : 'Entradas'}</small><b class="pos">${brl(ent)}</b></div><div><small>${pend ? 'A pagar' : 'Saídas'}</small><b class="neg">${brl(sai)}</b></div><div><small>${pend ? 'Saldo previsto' : 'Saldo'}</small><b class="${saldo >= 0 ? 'pos' : 'neg'}">${brl(saldo)}</b></div></div>`));
-    if (nPend) v.append(h(`<small class="muted" style="display:block;margin:-6px 0 12px">${nPend} pendente${nPend > 1 ? 's' : ''} fora dos totais.</small>`));
-    const linha = l => {
-      const c = catOf(l.categoria_id), e = l.tipo === 'entrada', vi = vencInfo(l, hoje);
-      const chip = l.status !== 'pendente' ? '' : vi ? `<i class="chip ${vi.cls}">${vi.texto}</i>` : '<i class="chip warn">Pendente</i>';
-      return `<div class="item" role="button" tabindex="0" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
-        <span class="grow"><b>${esc(l.descricao || c.nome)}</b><small>${chip} ${esc(c.nome)}${l.forma ? ' · ' + formaCurta(l.forma) : ''}${l.contato_nome ? ' · ' + esc(l.contato_nome) : ''}</small></span>
-        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b>
-        ${l.status === 'pendente' ? `<button class="ib ok" data-baixa="${l.id}" aria-label="Dar baixa" title="Dar baixa">${ico('check')}</button>` : ''}</div>`;
-    };
-    const dia = g => { // cabeçalho do dia com o resultado do dia (realizados)
-      const s = Math.round(g.itens.filter(conta).reduce((t, l) => t + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor), 0) * 100) / 100;
-      return `<div class="dayh"><b>${dayLabel(g.data, hoje)}</b>${s ? `<small class="${s > 0 ? 'pos' : 'neg'}">${s > 0 ? '+' : '−'}${brl(Math.abs(s))}</small>` : ''}</div>${g.itens.map(linha).join('')}`;
-    };
+    v.append(h(`<div class="seg" data-f="situacao"><button data-v="">Todas</button><button data-v="pendente">Pendentes</button><button data-v="pago">Realizadas</button></div>`));
+    bindSeg(v, Lanc, () => App.refresh());
+    const rows = await API.call('lancamentos.list', { mes: soPend ? '' : Store.mes, tipo: Lanc.tipo, status: Lanc.situacao, ordem: soPend ? 'asc' : '' });
+    const hoje = today();
     const list = h('<div class="list"></div>');
-    list.innerHTML = rows.length ? groupByDay(rows).map(dia).join('')
-      : `<div class="empty">${pend ? 'Nenhuma pendência neste período.' : 'Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.'}</div>`;
-    list.onclick = ev => {
-      const bx = ev.target.closest('[data-baixa]'); if (bx) return Lanc.baixar(rows.find(r => r.id === bx.dataset.baixa));
-      const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id));
-    };
-    list.onkeydown = ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList.contains('item')) { ev.preventDefault(); ev.target.click(); } };
+    list.innerHTML = rows.length ? rows.map(l => {
+      const c = catOf(l.categoria_id), e = l.tipo === 'entrada', dt = l.vencimento || l.data;
+      const quando = l.status === 'pendente' ? (() => { const i = vencInfo(dt, hoje); return `<span class="due ${i.cls}">${i.texto}</span>`; })() : (e ? 'Recebido ' : 'Pago ') + fmtDate(l.data_pagamento || dt);
+      const partes = [esc(c.nome), quando, l.forma ? formaCurta(l.forma) : '', l.contato_nome ? esc(l.contato_nome) : ''].filter(Boolean).join(' · ');
+      return `
+      <button class="item" data-id="${l.id}"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
+        <span class="grow"><b>${esc(l.descricao || c.nome)}${l.parcelas ? ` <i class="chip">${l.parcela}/${l.parcelas}</i>` : ''}</b><small>${partes}${l.status === 'pendente' ? ' <i class="chip warn">Pendente</i>' : ''}</small></span>
+        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(l.valor)}</b></button>`; }).join('')
+      : `<div class="empty">${soPend ? 'Nenhuma conta em aberto.' : 'Nenhum lançamento neste período.<br>Toque em + para registrar o primeiro.'}</div>`;
+    list.onclick = ev => { const b = ev.target.closest('.item'); if (b) Lanc.form(rows.find(r => r.id === b.dataset.id)); };
     v.append(list);
   }
 });

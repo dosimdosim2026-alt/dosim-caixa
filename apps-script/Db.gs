@@ -2,13 +2,13 @@
 const SCHEMAS = {
   categorias:  ['id', 'nome', 'tipo', 'cor', 'ativo', 'criado_em'],
   // Novas colunas entram SEMPRE no fim: abas já existentes são migradas automaticamente.
-  lancamentos: ['id', 'data', 'tipo', 'categoria_id', 'descricao', 'valor', 'status', 'criado_em', 'forma', 'item_id', 'contato_id', 'contato_nome'],
+  lancamentos: ['id', 'data', 'tipo', 'categoria_id', 'descricao', 'valor', 'status', 'criado_em', 'forma', 'item_id', 'contato_id', 'contato_nome', 'vencimento', 'parcela', 'parcelas', 'grupo_id', 'data_pagamento'],
   catalogo:    ['id', 'tipo', 'nome', 'categoria_id', 'preco', 'ativo', 'criado_em'],
   contatos:    ['id', 'nome', 'telefone', 'obs', 'cliente', 'fornecedor', 'ativo', 'criado_em'],
   config:      ['chave', 'val']
   // fornecedores: ['id','nome','documento','contato','criado_em'],
 };
-const NUMERIC_COLS_ = ['valor', 'ativo', 'preco', 'cliente', 'fornecedor'];
+const NUMERIC_COLS_ = ['valor', 'ativo', 'preco', 'cliente', 'fornecedor', 'parcela', 'parcelas'];
 
 function bool_(v) { return v === true || String(v).toLowerCase() === 'true'; }
 
@@ -80,6 +80,41 @@ const Db = {
         rec.criado_em = Utilities.formatDate(new Date(), self.ss().getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm:ss');
       self.sheet(name).appendRow(cols.map(function (c) { return rec[c] === undefined ? '' : rec[c]; }));
       return rec;
+    });
+  },
+
+  /** Grava várias linhas de uma vez (uma só trava e uma só escrita): usado nas parcelas. */
+  insertMany: function (name, objs) {
+    const self = this;
+    return this.lock_(function () {
+      const cols = SCHEMAS[name], sh = self.sheet(name);
+      const agora = Utilities.formatDate(new Date(), self.ss().getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+      const recs = objs.map(function (o) {
+        const r = Object.assign({}, o);
+        if (cols.indexOf('id') > -1) r.id = Utilities.getUuid();
+        if (cols.indexOf('criado_em') > -1) r.criado_em = agora;
+        return r;
+      });
+      const primeira = sh.getLastRow() + 1, falta = primeira + recs.length - 1 - sh.getMaxRows();
+      if (falta > 0) sh.insertRowsAfter(sh.getMaxRows(), falta);   // setValues não aumenta a planilha sozinho
+      sh.getRange(primeira, 1, recs.length, cols.length).setValues(recs.map(function (r) {
+        return cols.map(function (c) { return r[c] === undefined ? '' : r[c]; });
+      }));
+      return recs;
+    });
+  },
+
+  /** Apaga várias linhas pelo id (de baixo para cima, para os índices não deslocarem). */
+  removeMany: function (name, ids) {
+    const self = this;
+    return this.lock_(function () {
+      const sh = self.sheet(name), cols = SCHEMAS[name], n = sh.getLastRow(), ci = cols.indexOf('id');
+      if (n < 2) return 0;
+      const chaves = sh.getRange(2, ci + 1, n - 1, 1).getValues().map(function (r) { return String(r[0]); });
+      const alvo = {}; ids.forEach(function (i) { alvo[String(i)] = true; });
+      let removidas = 0;
+      for (let i = chaves.length - 1; i >= 0; i--) if (alvo[chaves[i]]) { sh.deleteRow(i + 2); removidas++; }
+      return removidas;
     });
   },
 

@@ -145,3 +145,41 @@ describe('REG-014 — PWA em iframe quebrava no celular (erro do Drive com vári
     assert.equal(r.ok, true);
   });
 });
+
+describe('REG-015 — contas de outros meses não apareciam no painel (só pendências do mês pela data do lançamento)', () => {
+  test('conta vencida em mês anterior e conta de mês futuro aparecem no radar de contas a pagar', () => {
+    const b = loadBackend();
+    for (const v of ['2026-08-10', '2027-02-10']) b.lanc({ tipo: 'saida', status: 'pendente', valor: v === '2026-08-10' ? 40 : 60, vencimento: v, data: '2026-11-01' });
+    const d = b.call('dashboard.summary', { mes: '2026-11', hoje: '2026-11-22' });
+    assert.equal(d.contasPagar.total, 100); assert.equal(d.contasPagar.vencidas.total, 40); assert.equal(d.aPagar, 0);
+  });
+});
+
+describe('REG-016 — compra parcelada exigia lançar cada parcela à mão e o vencimento se misturava com a data do lançamento', () => {
+  test('uma compra em 3x gera 3 parcelas, cada uma com o seu vencimento, mantendo a data do lançamento', () => {
+    const b = loadBackend();
+    const ps = b.lanc({ tipo: 'saida', valor: 300, data: '2026-11-10', vencimento: '2026-12-05', parcelado: true, parcelas: 3, descricao: 'Fogão' });
+    assert.deepEqual(ps.map(p => p.vencimento), ['2026-12-05', '2027-01-05', '2027-02-05']);
+    assert.ok(ps.every(p => p.data === '2026-11-10' && p.valor === 100));
+  });
+  test('o mês de caixa de cada parcela segue o vencimento (não a data do lançamento)', () => {
+    const b = loadBackend();
+    b.lanc({ tipo: 'saida', valor: 300, data: '2026-11-10', vencimento: '2026-12-05', parcelado: true, parcelas: 3 });
+    assert.equal(b.call('lancamentos.list', { mes: '2026-11' }).length, 0);
+    assert.equal(b.call('lancamentos.list', { mes: '2026-12' }).length, 1);
+    assert.equal(b.call('dashboard.summary', { mes: '2026-12', hoje: '2026-11-22' }).aPagar, 100);
+  });
+});
+
+const somaPainel = (b, p) => b.call('dashboard.summary', { hoje: '2026-12-31', ...p });
+
+describe('REG-017 — conta paga contava no mês do vencimento/lançamento e não no dia em que o dinheiro saiu', () => {
+  test('pagar em dezembro uma conta de novembro move a saída para dezembro (dia, mês e ano)', () => {
+    const b = loadBackend();
+    const l = b.lanc({ tipo: 'saida', valor: 250, data: '2026-10-28', vencimento: '2026-11-30', status: 'pendente' });
+    b.call('lancamentos.baixa', { id: l.id, data_pagamento: '2027-01-02' });
+    assert.equal(somaPainel(b, { periodo: 'mes', ref: '2026-11' }).saidas, 0);
+    assert.equal(somaPainel(b, { periodo: 'dia', ref: '2027-01-02' }).saidas, 250);
+    assert.equal(somaPainel(b, { periodo: 'ano', ref: '2027' }).saidas, 250); assert.equal(somaPainel(b, { periodo: 'ano', ref: '2026' }).saidas, 0);
+  });
+});

@@ -5,26 +5,28 @@ Correções citam o ID do teste de regressão (`REG-nnn`) em `tests/regression/r
 
 ## [1.3.0] - 2026-11-22
 
-### Novidades
-- **Alerta de vencimento de despesas a pagar.** Em despesa pendente, a data do lançamento é o vencimento. O app avisa de 4 formas:
-  - **Painel:** card "Contas a pagar" no topo (vale para qualquer mês) com vencidas, vencem hoje e próximos 7 dias, total de cada grupo, as 5 mais urgentes e botão "Ver todas".
-  - **Menu:** bolinha vermelha em Lançamentos com a quantidade de contas vencidas + que vencem hoje.
-  - **Lista de Lançamentos:** etiqueta em cada despesa pendente ("Vencida há 3 dias", "Vence hoje", "Vence em 2 dias").
-  - **Ao abrir o app:** aviso interno (toast) quando há contas vencidas ou vencendo hoje.
-- **Dar baixa em um toque.** Botão ✓ nas linhas pendentes (lista e card do Painel). Abre uma confirmação interna com a **data do pagamento/recebimento** (já preenchida com hoje) e marca como realizado. A data do lançamento passa a ser a do pagamento, para o fluxo de caixa refletir quando o dinheiro saiu.
-- **Lista agrupada por dia**, com título "Hoje, 22/11", "Ontem, 21/11"… e o resultado do dia (só realizados) ao lado. A data sai de dentro de cada linha.
-- **Filtro "Só pendentes"** em Lançamentos. Nele, o resumo mostra A receber, A pagar e Saldo previsto, em ordem de vencimento (o mais atrasado primeiro).
-- **Carregamento** com bloco animado no lugar do texto "Carregando…" (respeita "reduzir movimento" do aparelho).
-- API: `lancamentos.vencimentos` (`hoje`, `dias` de 1 a 60, padrão 7), `lancamentos.baixar` (`id`, `data` opcional) e `status` em `lancamentos.list`.
+### Mudança de regra: regime de caixa
+- **Conta paga conta no dia em que o dinheiro saiu (ou entrou).** Novo campo **Data do pagamento** (coluna `data_pagamento`). Realizado conta na data do pagamento; pendente continua contando no vencimento (previsão). Vale para a lista de lançamentos, os totais e o gráfico. Registros antigos sem a data usam o vencimento ou a data do lançamento, como antes.
+- **Dar baixa pergunta a data e a forma** (Pagar/Receber no painel): padrão hoje, sem data futura na tela; a forma de pagamento usada é gravada.
+- **Fechamento por dia, mês e ano no Painel**: seletor Dia / Mês / Ano com navegação. Dia mostra as movimentações do dia e os últimos 7 dias; Mês os últimos 6 meses; Ano os 12 meses e uma tabela mês a mês com o total do ano.
+- Lançamento realizado ganha "Data do pagamento/recebimento" (acompanha a data do lançamento até você mudar); pendente marcado como realizado sugere hoje. A lista mostra "Pago em dd/mm" / "Recebido dd/mm".
+
+### Correções
+- REG-017 — conta paga contava no mês do vencimento ou do lançamento, e não no dia em que o dinheiro saiu.
 
 ## [1.2.0] - 2026-11-22
 
 ### Novidades
-- **Lançamentos: filtro por período.** Atalhos **Dia**, **Semana** (segunda a domingo) e **Mês**, com setas ‹ › para andar no tempo, e **Período** para escolher qualquer intervalo (De/Até). Os filtros Todos/Entradas/Saídas continuam valendo junto. Se a data inicial passar da final (ou o contrário), a outra ponta acompanha.
-- Ao trocar de atalho, a tela mantém o dia ou mês que você olhava (hoje, se ele estiver dentro do período). Tocar de novo no atalho ativo volta para hoje.
-- **Totais do período** (entradas, saídas e saldo) acima da lista. Contam só lançamentos realizados, como no Painel; o número de pendentes aparece em aviso à parte.
-- Quando o período cruza anos, a lista mostra a data completa (dd/mm/aaaa).
-- API: `lancamentos.list` aceita `de` e `ate` (aaaa-mm-dd, inclusivos). `mes` continua funcionando. Datas fora do formato ou `de` maior que `ate` voltam com mensagem clara.
+- **Painel: contas a pagar (e a receber) no radar.** Cartão logo abaixo do saldo, com contas em aberto de **todos os meses**, vencidas em destaque, total dos próximos 7 dias, botão **Pagar/Receber** (dá baixa em um toque) e "Ver todas". O indicador "A pagar (em aberto)" substitui o antigo "Pendentes".
+- **Vencimento separado da data do lançamento.** Campo novo "Vencimento" em lançamentos pendentes; o mês de caixa (lista, totais e gráfico) segue o vencimento quando houver. Registros antigos não mudam.
+- **Compras e vendas parceladas.** "Parcelar" no lançamento: de 2 a 60 parcelas geradas automaticamente, vencimento mensal (dia 31 vira o último dia de meses curtos), centavos de arredondamento na última parcela, opção "1ª parcela já paga". Prévia do valor e das datas antes de salvar. Editar uma parcela altera só ela; dá para excluir as parcelas pendentes de um parcelamento de uma vez.
+- Lançamentos: filtro por situação (Todas / Pendentes / Realizadas); "Pendentes" mostra todos os meses, do vencimento mais próximo ao mais distante.
+- Planilha: 4 colunas novas no fim da aba `lancamentos` (`vencimento`, `parcela`, `parcelas`, `grupo_id`), criadas automaticamente.
+
+### Correções
+- REG-015 — contas de outros meses (vencidas ou futuras) não apareciam no painel; só pendências do mês pela data do lançamento.
+- REG-016 — compra parcelada exigia lançar cada parcela à mão e o vencimento se misturava com a data do lançamento.
+- Datas inexistentes (ex.: 31/02) passam a ser recusadas.
 
 ## [1.1.0] - 2026-11-21
 

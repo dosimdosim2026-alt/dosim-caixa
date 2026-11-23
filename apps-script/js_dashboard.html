@@ -3,85 +3,130 @@ const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov'
 
 /** Gráfico de colunas (entradas x saídas) na largura real W: cabe no celular, sem rolagem horizontal.
  *  Valor em reais no topo de cada coluna, na diagonal. Celular (<460px): sem centavos. */
-function barChartSvg(serie, W) {
+function barChartSvg(serie, W, opts) {
+  const comValores = !(opts && opts.valores === false);                       // false: ano (os valores vão na tabela)
+  const rotulo = s => (s.mes.length > 7 ? s.mes.slice(8) + '/' + s.mes.slice(5, 7) : MESES[+s.mes.slice(5) - 1]);
   const max = Math.max(1, ...serie.flatMap(s => [s.entradas, s.saidas]));
   const narrow = W < 460, fs = W < 300 ? 9 : narrow ? 10 : 11;
   const fmt = narrow ? n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }) : brl;
   // Folga calculada pelo maior rótulo (diagonal a 45°): cabe de R$ 9,99 a milhões, sem cortar no topo nem na direita
   const maior = Math.max(...serie.flatMap(s => [fmt(s.entradas), fmt(s.saidas)]).map(t => t.length));
-  const proj = Math.ceil(maior * fs * 0.62 * Math.SQRT1_2);
-  const padL = 4, padR = Math.max(narrow ? 42 : 58, proj + 4), top = Math.max(narrow ? 56 : 64, proj + 12), ALT = 120, base = top + ALT, H = base + 26;
+  const proj = comValores ? Math.ceil(maior * fs * 0.62 * Math.SQRT1_2) : 0;
+  const padL = 4, padR = comValores ? Math.max(narrow ? 42 : 58, proj + 4) : 6, top = comValores ? Math.max(narrow ? 56 : 64, proj + 12) : 14, ALT = 120, base = top + ALT, H = base + 26;
   const gw = (W - padL - padR) / serie.length, bw = Math.min(26, gw * 0.3), gap = Math.max(3, gw * 0.06);
   const col = (x, val, cls) => {
     if (!val) return '';
     const hh = Math.max(2, val / max * ALT), y = base - hh;
-    return `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 3)}" fill="var(--${cls})"/>
-      <text class="v ${cls}" style="font-size:${fs}px" transform="translate(${x + bw / 2} ${y - 5}) rotate(-45)">${fmt(val)}</text>`;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" rx="${Math.min(6, bw / 3)}" fill="var(--${cls})"/>${comValores ? `
+      <text class="v ${cls}" style="font-size:${fs}px" transform="translate(${x + bw / 2} ${y - 5}) rotate(-45)">${fmt(val)}</text>` : ''}`;
   };
   return `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Entradas e saídas dos últimos 6 meses"><line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--border)"/>` +
     serie.map((s, i) => {
       const x = padL + i * gw + (gw - (2 * bw + gap)) / 2;
       return col(x, s.entradas, 'in') + col(x + bw + gap, s.saidas, 'out') +
-        `<text x="${x + bw + gap / 2}" y="${base + 17}" text-anchor="middle" style="font-size:${fs}px">${MESES[+s.mes.slice(5) - 1]}</text>`;
+        `<text x="${x + bw + gap / 2}" y="${base + 17}" text-anchor="middle" style="font-size:${fs}px">${rotulo(s)}</text>`;
     }).join('') + '</svg>';
 }
 
-/** Card "Contas a pagar": vencidas, vencem hoje e próximos dias, com baixa em um toque (null se não há o que mostrar). */
-function vencCard(d) {
-  if (!d || !d.itens.length) return null;
-  const r = d.resumo, mostra = d.itens.slice(0, 5), hoje = today();
-  const chip = (k, cls, txt) => k.qtd ? `<i class="chip ${cls}">${txt(k.qtd)} · ${brl(k.total)}</i>` : '';
-  const linha = i => {
-    const vi = vencInfo(Object.assign({ tipo: 'saida', status: 'pendente' }, i), hoje);
-    return `<div class="vrow"><span class="grow"><b>${esc(i.descricao || catOf(i.categoria_id).nome)}</b>
-      <small>${vi ? `<i class="chip ${vi.cls}">${vi.texto}</i> ` : ''}${i.contato_nome ? esc(i.contato_nome) + ' · ' : ''}${fmtDateFull(i.data)}</small></span>
-      <b class="neg v">${brl(i.valor)}</b><button class="ib ok" data-baixa="${i.id}" aria-label="Dar baixa" title="Dar baixa">${ico('check')}</button></div>`;
-  };
-  const el = h(`<div class="card venc ${d.alertas ? 'alert' : ''}"><h3>${ico('alert')} Contas a pagar</h3>
-    <div class="vsum">${chip(r.vencidas, 'late', n => `${n} vencida${n > 1 ? 's' : ''}`)}${chip(r.hoje, 'today', n => `${n} vence${n > 1 ? 'm' : ''} hoje`)}${chip(r.proximas, 'soon', n => `${n} nos próximos ${d.dias} dias`)}</div>
-    ${mostra.map(linha).join('')}
-    <button class="btn vall" data-ver>${d.itens.length > mostra.length ? `Ver todas (${d.itens.length})` : 'Ver em Lançamentos'}</button></div>`);
-  el.onclick = e => {
-    const b = e.target.closest('[data-baixa]');
-    if (b) { const i = d.itens.find(x => x.id === b.dataset.baixa); if (i) Lanc.baixar(Object.assign({ tipo: 'saida' }, i)); return; }
-    if (e.target.closest('[data-ver]')) Lanc.verPendentes();
-  };
-  return el;
+/** Radar de contas em aberto (a pagar / a receber), de todos os meses, com vencimento e botão de baixa. */
+const Radar = { tipo: 'saida' };
+function radarHtml(d, hoje) {
+  const pagar = Radar.tipo === 'saida', b = pagar ? d.contasPagar : d.contasReceber, acao = pagar ? 'Pagar' : 'Receber';
+  const resumo = (b.vencidas.qtd ? `<span class="neg">${b.vencidas.qtd} vencida${b.vencidas.qtd > 1 ? 's' : ''} · ${brl(b.vencidas.total)}</span>` : '<span class="muted">Nenhuma vencida</span>')
+    + `<span>Próximos 7 dias · ${brl(b.proximos7.total)}</span>`;
+  const linhas = b.itens.map(i => {
+    const info = vencInfo(i.venc, hoje), nome = i.descricao || i.categoria || 'Sem descrição';
+    const meta = [`<span class="due ${info.cls}">${info.texto}</span>`, esc(i.contato || i.categoria || '')].filter(Boolean).join(' · ');
+    return `<div class="item"><span class="grow" data-edit="${i.id}"><b>${esc(nome)}${i.parcelas ? ` <i class="chip">${i.parcela}/${i.parcelas}</i>` : ''}</b><small>${meta}</small></span>
+      <b class="${pagar ? 'neg' : 'pos'}">${brl(i.valor)}</b><button class="btn sm" data-baixa="${i.id}">${acao}</button></div>`;
+  }).join('');
+  return `<div class="head-row"><h3>${pagar ? 'Contas a pagar' : 'Contas a receber'}</h3>
+      <div class="seg mini"><button data-radar="saida" class="${pagar ? 'on' : ''}">A pagar</button><button data-radar="entrada" class="${pagar ? '' : 'on'}">A receber</button></div></div>
+    <div class="radar-sum">${resumo}</div>
+    ${b.qtd ? `<div class="list">${linhas}</div>${b.qtd > b.itens.length ? `<button class="btn" data-all style="width:100%;margin-top:10px">Ver todas (${b.qtd})</button>` : ''}`
+      : `<div class="empty">${pagar ? 'Nenhuma conta a pagar em aberto.' : 'Nenhuma conta a receber em aberto.'}</div>`}`;
 }
+
+/** Período do fechamento: dia, mês (padrão) ou ano. O mês é compartilhado com a tela de Lançamentos. */
+const Dash = {
+  periodo: 'mes', dia: null, ano: null,
+  ref() { return this.periodo === 'dia' ? (this.dia = this.dia || today()) : this.periodo === 'ano' ? (this.ano = this.ano || today().slice(0, 4)) : Store.mes; },
+  set(v) { if (this.periodo === 'dia') this.dia = v; else if (this.periodo === 'ano') this.ano = v; else Store.mes = v; }
+};
+const brlCurto = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 
 App.register({ id: 'dashboard', label: 'Painel', icon: 'home', order: 10,
   async render(v) {
-    v.append(h(`<div class="head"><div><h1>Painel</h1><small>Resumo do fluxo de caixa</small></div></div>`));
-    const slot = h('<div></div>'); v.append(slot); // alerta de vencimento: vale para qualquer mês, fica acima do seletor
-    v.append(monthBar(() => App.refresh()));
-    const [d, venc] = await Promise.all([API.call('dashboard.summary', { mes: Store.mes }), Venc.load()]);
-    const vc = vencCard(venc); if (vc) slot.append(vc);
-    const draw = wrap => { const W = Math.floor(wrap.clientWidth); if (W >= 120) wrap.innerHTML = barChartSvg(d.serie, W); };
+    v.append(h(`<div class="head"><div><h1>Painel</h1><small>Fechamento do caixa: o que foi pago e recebido, na data do pagamento</small></div></div>`));
+    const p = Dash.periodo, ref = Dash.ref(), hoje = today();
+    const barra = h(`<div><div class="seg" style="margin-bottom:10px">${[['dia', 'Dia'], ['mes', 'Mês'], ['ano', 'Ano']].map(([k, t]) => `<button data-periodo="${k}" class="${p === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div class="mbar"><button class="ib" data-shift="-1" aria-label="Período anterior">‹</button><span>${periodLabel(p, ref)}</span><button class="ib" data-shift="1" aria-label="Próximo período">›</button></div></div>`);
+    barra.addEventListener('click', e => {
+      const t = e.target.closest('[data-periodo]'), sh = e.target.closest('[data-shift]');
+      if (t && t.dataset.periodo !== p) {
+        const novo = t.dataset.periodo;
+        if (novo === 'dia') Dash.dia = Store.mes === hoje.slice(0, 7) ? hoje : Store.mes + '-01';
+        if (novo === 'ano') Dash.ano = Store.mes.slice(0, 4);
+        if (novo === 'mes' && p === 'dia' && Dash.dia) Store.mes = Dash.dia.slice(0, 7);
+        Dash.periodo = novo; App.refresh();
+      }
+      if (sh) { Dash.set(periodShift(p, ref, +sh.dataset.shift)); App.refresh(); }
+    });
+    v.append(barra);
+
+    const d = await API.call('dashboard.summary', { periodo: p, ref, hoje });
+    const de = { dia: 'do dia', mes: 'do mês', ano: 'do ano' }[p], titulo = { dia: 'Últimos 7 dias', mes: 'Últimos 6 meses', ano: `Mês a mês em ${ref}` }[p];
+    const draw = wrap => { const W = Math.floor(wrap.clientWidth); if (W >= 120) wrap.innerHTML = barChartSvg(d.serie, W, { valores: p !== 'ano' }); };
     const maxCat = Math.max(1, ...d.porCategoria.map(c => c.total));
     const cats = d.porCategoria.length ? d.porCategoria.map(c =>
       `<div class="cat-row"><span class="nm">${esc(c.nome)}</span><span>${brl(c.total)}</span></div>
        <div class="bar" style="--c:${esc(c.cor)}"><i style="width:${c.total / maxCat * 100}%"></i></div>`).join('')
-      : '<div class="empty">Sem saídas realizadas neste mês.</div>';
+      : `<div class="empty">Sem saídas realizadas neste ${{ dia: 'dia', mes: 'mês', ano: 'ano' }[p]}.</div>`;
     const pend = d.porContato.length ? `<div class="card" style="margin-top:12px"><h3>Pendências por contato</h3>${d.porContato.map(c => {
       const net = c.aReceber - c.aPagar;
       return `<div class="pend"><span class="grow"><b>${esc(c.nome)}</b><br><small>${c.aReceber ? 'A receber ' + brl(c.aReceber) : ''}${c.aReceber && c.aPagar ? ' · ' : ''}${c.aPagar ? 'A pagar ' + brl(c.aPagar) : ''}</small></span>
         <b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}${brl(Math.abs(net))}</b></div>`; }).join('')}
       <small>Considera todos os meses. Positivo: o contato deve a você. Negativo: você deve a ele.</small></div>` : '';
+
+    // Fechamento do dia: lista do que foi pago/recebido nele | do ano: tabela mês a mês
+    const mov = p === 'dia' ? `<div class="card" id="mov" style="margin-top:12px"><h3>Movimentações do dia</h3>${d.movimentos.length ? d.movimentos.map(m => {
+      const e = m.tipo === 'entrada', c = catOf(m.categoria_id);
+      return `<div class="item"><span class="dot" style="--c:${esc(c.cor)}">${ico(e ? 'up' : 'down')}</span>
+        <span class="grow" data-edit="${m.id}"><b>${esc(m.descricao || m.categoria || c.nome)}</b><small>${esc(m.categoria || c.nome)}${m.forma ? ' · ' + formaCurta(m.forma) : ''}${m.contato ? ' · ' + esc(m.contato) : ''}</small></span>
+        <b class="${e ? 'pos' : 'neg'}">${e ? '+' : '−'}${brl(m.valor)}</b></div>`; }).join('') : '<div class="empty">Nada foi pago ou recebido neste dia.</div>'}</div>` : '';
+    const fmtTab = v.clientWidth && v.clientWidth < 460 ? brlCurto : brl;
+    const tabela = p === 'ano' ? `<div class="card" style="margin-top:12px"><h3>Fechamento mês a mês</h3>
+      <div class="fech fech-h"><span></span><span>Entradas</span><span>Saídas</span><span>Saldo</span></div>
+      ${d.serie.map(s => { const sd = s.entradas - s.saidas, vazio = !s.entradas && !s.saidas;
+        return `<div class="fech"><span>${MESES[+s.mes.slice(5) - 1]}</span><span class="pos">${s.entradas ? fmtTab(s.entradas) : '—'}</span><span class="neg">${s.saidas ? fmtTab(s.saidas) : '—'}</span><b class="${sd < 0 ? 'neg' : ''}">${vazio ? '—' : fmtTab(sd)}</b></div>`; }).join('')}
+      <div class="fech fech-t"><b>Ano</b><b class="pos">${fmtTab(d.entradas)}</b><b class="neg">${fmtTab(d.saidas)}</b><b class="${d.saldo < 0 ? 'neg' : ''}">${fmtTab(d.saldo)}</b></div></div>` : '';
+
     v.append(h(`<div>
       <div class="kpis">
-        <div class="card kpi hero"><span>Saldo do mês</span><b>${brl(d.saldo)}</b></div>
+        <div class="card kpi hero"><span>Saldo ${de}</span><b>${brl(d.saldo)}</b></div>
         <div class="card kpi"><span class="pos">${ico('up')} Entradas</span><b>${brl(d.entradas)}</b></div>
         <div class="card kpi"><span class="neg">${ico('down')} Saídas</span><b>${brl(d.saidas)}</b></div>
-        <div class="card kpi wide"><span>${ico('clock')} Pendentes</span>
-          <small>A receber <b class="pos" style="font-size:15px">${brl(d.aReceber)}</b></small>
-          <small>A pagar <b class="neg" style="font-size:15px">${brl(d.aPagar)}</b></small></div>
+        <div class="card kpi wide"><span>${ico('clock')} A pagar (em aberto)</span><b class="neg">${brl(d.contasPagar.total)}</b>
+          <small>${d.contasPagar.vencidas.qtd ? `<span class="neg">${d.contasPagar.vencidas.qtd} vencida${d.contasPagar.vencidas.qtd > 1 ? 's' : ''} · ${brl(d.contasPagar.vencidas.total)}</span>` : 'Nenhuma vencida'} · A receber ${brl(d.contasReceber.total)}</small></div>
       </div>
+      <div class="card" id="radar" style="margin-bottom:12px">${radarHtml(d, hoje)}</div>
       <div class="grid2">
-        <div class="card"><h3>Últimos 6 meses</h3>
+        <div class="card"><h3>${titulo}</h3>
           <div class="chart-wrap"></div>
           <div class="row" style="gap:16px;margin-top:6px"><small><b class="pos">●</b> Entradas</small><small><b class="neg">●</b> Saídas</small></div></div>
         <div class="card"><h3>Maiores saídas</h3>${cats}</div>
-      </div>${pend}</div>`));
+      </div>${mov}${tabela}${pend}</div>`));
+
+    const radar = $('#radar', v), todos = [...d.contasPagar.itens, ...d.contasReceber.itens];
+    radar.addEventListener('click', e => {
+      const t = e.target.closest('[data-radar]'), b = e.target.closest('[data-baixa]'), ed = e.target.closest('[data-edit]'), all = e.target.closest('[data-all]');
+      if (t) { Radar.tipo = t.dataset.radar; radar.innerHTML = radarHtml(d, hoje); }
+      if (ed) Lanc.form(todos.find(i => i.id === ed.dataset.edit));
+      if (all) { Lanc.tipo = Radar.tipo; Lanc.situacao = 'pendente'; App.go('lancamentos'); }
+      if (b) Lanc.baixa(todos.find(i => i.id === b.dataset.baixa));         // pergunta a data do pagamento e a forma
+    });
+    const movEl = $('#mov', v);
+    if (movEl) movEl.addEventListener('click', e => { const ed = e.target.closest('[data-edit]'); if (ed) Lanc.form(d.movimentos.find(i => i.id === ed.dataset.edit)); });
     const w = $('.chart-wrap', v); draw(w);
     if (window.ResizeObserver) new ResizeObserver(() => draw(w)).observe(w);
   }

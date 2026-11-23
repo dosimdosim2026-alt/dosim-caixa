@@ -7,38 +7,50 @@ const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const pad = n => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const fmtDate = d => String(d).split('-').reverse().slice(0, 2).join('/');
-const fmtDateFull = d => String(d).split('-').reverse().join('/');
-/* Períodos: datas "aaaa-mm-dd" calculadas no horário local (sem passar por UTC, que trocaria o dia) */
-const parseDay = s => { const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
-const fmtDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const addDays = (s, n) => { const d = parseDay(s); d.setDate(d.getDate() + n); return fmtDay(d); };
-/** Intervalo {de, ate} (inclusive) do dia, da semana (segunda a domingo) ou do mês que contém a data "ref". */
-function periodRange(modo, ref) {
-  if (modo === 'semana') { const ini = addDays(ref, -((parseDay(ref).getDay() + 6) % 7)); return { de: ini, ate: addDays(ini, 6) }; }
-  if (modo === 'mes') { const d = parseDay(ref); return { de: `${ref.slice(0, 7)}-01`, ate: fmtDay(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }; }
-  return { de: ref, ate: ref };
+const fmtDMA = d => String(d).split('-').reverse().join('/');
+const isoFromDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** Soma n meses mantendo o dia; em meses curtos usa o último dia (31/01 → 28/02 → 31/03). Mesma regra do servidor. */
+function addMonthsISO(iso, n) {
+  const y = +iso.slice(0, 4), m = +iso.slice(5, 7), d = +iso.slice(8, 10);
+  const alvo = new Date(y, m - 1 + n, 1), ultimo = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate();
+  return isoFromDate(new Date(alvo.getFullYear(), alvo.getMonth(), Math.min(d, ultimo)));
 }
-const daysBetween = (a, b) => Math.round((parseDay(b) - parseDay(a)) / 864e5); // negativo: b é anterior a a
-/** Situação de uma despesa a pagar (saída pendente) frente a "hoje": vencida, vence hoje ou vence em até 7 dias. Outros: null. */
-function vencInfo(l, hoje) {
-  if (!l || l.tipo !== 'saida' || l.status !== 'pendente') return null;
-  const n = daysBetween(hoje, l.data);
-  if (n < 0) return { n, cls: 'late', texto: n === -1 ? 'Venceu ontem' : `Vencida há ${-n} dias` };
-  if (n === 0) return { n, cls: 'today', texto: 'Vence hoje' };
-  if (n <= 7) return { n, cls: 'soon', texto: n === 1 ? 'Vence amanhã' : `Vence em ${n} dias` };
-  return null;
+const addDaysISO = (iso, n) => isoFromDate(new Date(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10) + n));
+/** Fechamento: avança/recua o período. dia: aaaa-mm-dd | mes: aaaa-mm | ano: aaaa */
+function periodShift(periodo, ref, n) {
+  if (periodo === 'dia') return addDaysISO(ref, n);
+  if (periodo === 'ano') return String(+ref + n);
+  return addMonthsISO(ref + '-01', n).slice(0, 7);
 }
-/** Título do dia na lista: "Hoje, 22/11", "Ontem, 21/11", "sexta-feira, 20/11" (com o ano, se não for o ano atual). */
-function dayLabel(d, hoje) {
-  const n = daysBetween(hoje, d), dm = String(d).slice(0, 4) === String(hoje).slice(0, 4) ? fmtDate(d) : fmtDateFull(d);
-  if (n === 0) return 'Hoje, ' + dm; if (n === -1) return 'Ontem, ' + dm; if (n === 1) return 'Amanhã, ' + dm;
-  return parseDay(d).toLocaleDateString('pt-BR', { weekday: 'long' }) + ', ' + dm;
+function periodLabel(periodo, ref) {
+  if (periodo === 'ano') return String(ref);
+  if (periodo === 'mes') return new Date(+ref.slice(0, 4), +ref.slice(5, 7) - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  return new Date(+ref.slice(0, 4), +ref.slice(5, 7) - 1, +ref.slice(8, 10)).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 }
-/** Agrupa linhas (já ordenadas por data) em [{ data, itens }], mantendo a ordem. */
-function groupByDay(rows) {
-  const out = [];
-  rows.forEach(r => { const g = out[out.length - 1]; if (g && g.data === r.data) g.itens.push(r); else out.push({ data: r.data, itens: [r] }); });
+/** Conteúdo da janela "dar baixa": a data em que o dinheiro realmente saiu/entrou e a forma usada. */
+function baixaHtml(item, hoje) {
+  const pagar = item.tipo === 'saida';
+  const formas = FORMAS.map(f => `<option value="${f[0]}" ${f[0] === (item.forma || 'pix') ? 'selected' : ''}>${f[1]}</option>`).join('');
+  return `<p style="margin-bottom:14px"><b>${esc(item.descricao || item.categoria || 'Conta')}</b><br><small class="muted">${brl(item.valor)}${item.parcelas ? ` · parcela ${item.parcela}/${item.parcelas}` : ''}</small></p>
+    <label>${pagar ? 'Data do pagamento' : 'Data do recebimento'}<input id="b-data" type="date" value="${hoje}" max="${hoje}"></label>
+    <label>${pagar ? 'Forma de pagamento' : 'Forma de recebimento'}<select id="b-forma">${formas}</select></label>
+    <div class="row end"><button class="btn primary" data-confirm>${pagar ? 'Confirmar pagamento' : 'Confirmar recebimento'}</button></div>`;
+}
+/** Divide o total em n parcelas (em centavos); a diferença fica na última. Mesma regra do servidor. */
+function splitParcelas(total, n) {
+  const cents = Math.round(total * 100), base = Math.floor(cents / n), resto = cents - base * n, out = [];
+  for (let i = 0; i < n; i++) out.push((i === n - 1 ? base + resto : base) / 100);
   return out;
+}
+/** Situação do vencimento em relação a hoje: texto e cor (late = vencida, today/soon = atenção). */
+function vencInfo(iso, hoje) {
+  const t = s => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10));
+  const dias = Math.round((t(iso) - t(hoje)) / 86400000);
+  if (dias < 0) return { dias, cls: 'late', texto: dias === -1 ? 'Venceu ontem' : `Venceu há ${-dias} dias` };
+  if (dias === 0) return { dias, cls: 'today', texto: 'Vence hoje' };
+  if (dias === 1) return { dias, cls: 'soon', texto: 'Vence amanhã' };
+  if (dias <= 7) return { dias, cls: 'soon', texto: `Vence em ${dias} dias` };
+  return { dias, cls: '', texto: 'Vence ' + (iso.slice(0, 4) === hoje.slice(0, 4) ? fmtDate(iso) : fmtDMA(iso)) };
 }
 /* Máscara bancária: digita-se só números e eles entram da direita para a esquerda (1000 -> R$ 10,00) */
 const maskMoney = v => {
@@ -65,9 +77,7 @@ const ICONS = {
   grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
   dots:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-  check:'<polyline points="20 6 9 17 4 12"/>',
-  alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
 };
 const ico = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
 
@@ -176,39 +186,6 @@ const Theme = {
   }
 };
 
-/* ===== Alerta de vencimento (despesas a pagar) ===== */
-const Venc = {
-  dados: null, _p: null,
-  /** Busca vencidas / vence hoje / próximos 7 dias. Chamadas simultâneas dividem a mesma requisição. */
-  load() {
-    if (!this._p) this._p = (async () => {
-      try { this.dados = await API.call('lancamentos.vencimentos', { hoje: today() }); }
-      catch (e) { /* o alerta é auxiliar: se falhar, a tela segue sem ele */ }
-      this.badge(); return this.dados;
-    })().finally(() => { this._p = null; });
-    return this._p;
-  },
-  /** Bolinha vermelha no menu de Lançamentos: vencidas + vencem hoje. */
-  badge() {
-    const n = this.dados ? this.dados.alertas : 0;
-    $$('.nav[data-id="lancamentos"]').forEach(el => {
-      let b = $('.bdg', el);
-      if (!n) { if (b) b.remove(); return; }
-      if (!b) { b = h('<i class="bdg"></i>'); el.append(b); }
-      b.textContent = n > 9 ? '9+' : String(n);
-      b.setAttribute('aria-label', n + (n > 1 ? ' contas vencidas ou vencendo hoje' : ' conta vencida ou vencendo hoje'));
-    });
-  },
-  /** Aviso (toast interno) ao abrir o app. */
-  avisar() {
-    const r = this.dados && this.dados.resumo; if (!r) return;
-    const v = r.vencidas.qtd, t = r.hoje.qtd, p = [];
-    if (v) p.push(`${v} conta${v > 1 ? 's' : ''} vencida${v > 1 ? 's' : ''}`);
-    if (t) p.push(`${t} vence${t > 1 ? 'm' : ''} hoje`);
-    if (p.length) UI.toast('Atenção: ' + p.join(' e '), v > 0);
-  }
-};
-
 /* ===== App: registro de módulos + navegação ===== */
 const App = {
   mods: [],
@@ -259,7 +236,6 @@ const App = {
     try { await Auth.ensure(); const b = await API.call('core.bootstrap'); Store.config = b.config; Store.categorias = b.categorias; Store.catalogo = b.catalogo; Store.contatos = b.contatos; }
     catch (e) { $('#app').innerHTML = `<div class="empty" style="margin:auto">Erro ao iniciar: ${esc(e.message)}</div>`; return; }
     this.shell(); Theme.apply(Store.config); this.go(this.mods[0].id);
-    Venc.load().then(() => Venc.avisar());
   }
 };
 </script>
